@@ -1,15 +1,14 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import init, { TeamtypeClient } from '@humanoidsandvichdispenser/teamtype-wasm';
+import init, {
+  TeamtypeClient,
+  type DisconnectReason,
+  type EphemeralMessage,
+  type NodeInfo,
+  type Range,
+  type WireDelta,
+} from '@humanoidsandvichdispenser/teamtype-wasm';
 import wasmUrl from '@humanoidsandvichdispenser/teamtype-wasm/teamtype_wasm_bg.wasm?url';
-
-import type {
-  DisconnectReason,
-  EphemeralMessage,
-  NodeInfo,
-  Range,
-  WireDelta,
-} from '@/teamtype/types';
 
 type ContentListener = (file: string, text: string) => void;
 type EditListener = (file: string, delta: WireDelta) => void;

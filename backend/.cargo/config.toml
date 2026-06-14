@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: 2026 HumanoidSandvichDispenser <humanoidsandvichdispenser@gmail.com>
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# teamtype's build.rs reads this at compile time.
+[env]
+CARGO_WORKSPACE_DIR = { value = "", relative = true }
