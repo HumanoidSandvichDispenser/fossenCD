@@ -1,73 +1,41 @@
-# teamtypst
+# fossenCD
 
-This template should help get you started developing with Vue 3 in Vite.
+fossenCD (free and open-source software, editor-native collaborative documents)
+is a self-hostable collaborative document editor built on top of Typst, a
+modern typesetting system. It uses
+[teamtype](https://github.com/teamtype/teamtype), a P2P collaborative editing
+protocol and system and communicates through a [WebAssembly peer
+implementation](https://github.com/humanoidsandvichdispenser/teamtype).
 
-## Recommended IDE Setup
+This allows users to both edit documents collaboratively using a web-based
+editor and also edit documents locally with their own text editors, all while
+maintaining real-time synchronization across all peers.
 
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+## Features
 
-## Recommended Browser Setup
+- Edit with multiple partners on the same Doc
+- Need to invite Team Pepeja to the project? No problem, just share the project
+  link and they can join in real-time!
+- Export your Docs to PDF when needed
+- Licensed under AGPL-3.0, with complete transparency for users of the entire
+  protocol, client, and frontend back-to-back
+- Users can also edit documents locally with other text editors like Neovim and
+  Emacs and third party things
+- Supports Typst incremental compilation, so even minor mistakes won't cause
+  the entire document to recompile
+- Peer client written in Rust, so not only is it blazing fast, it also has
+  SPEED, VIOLENCE, MOMENTUM with every edit
+- Put em around the La Casa with the ability to self-host the entire system,
+  stuff like that
 
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
+## Frequently Asked Questions
 
-## Type Support for `.vue` Imports in TS
+### What does the CD stand for?
 
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
+Something about Collaborative Documents being transparent and free and open
+source, etc etc. It's like, y'know, these little chubby cheek wannabes editing
+documents together.
 
-## Customize configuration
+### What the hell is pepeja?
 
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
-
-```sh
-npm install
-```
-
-### Compile and Hot-Reload for Development
-
-```sh
-npm run dev
-```
-
-### Type-Check, Compile and Minify for Production
-
-```sh
-npm run build
-```
-
-### Run Unit Tests with [Vitest](https://vitest.dev/)
-
-```sh
-npm run test:unit
-```
-
-### Run End-to-End Tests with [Playwright](https://playwright.dev)
-
-```sh
-# Install browsers for the first run
-npx playwright install
-
-# When testing on CI, must build the project first
-npm run build
-
-# Runs the end-to-end tests
-npm run test:e2e
-# Runs the tests only on Chromium
-npm run test:e2e -- --project=chromium
-# Runs the tests of a specific file
-npm run test:e2e -- tests/example.spec.ts
-# Runs the tests in debug mode
-npm run test:e2e -- --debug
-```
-
-### Lint with [ESLint](https://eslint.org/)
-
-```sh
-npm run lint
-```
+[Pepeja definition](https://imgur.com/RxbVYe7)
