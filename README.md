@@ -11,7 +11,7 @@ This allows users to both edit documents collaboratively using a web-based
 editor and also edit documents locally with their own text editors, all while
 maintaining real-time synchronization across all peers.
 
-## Features
+## WHAT IS THIS PROJECT ABOUT????
 
 - Edit with multiple partners on the same Doc
 - Need to invite Team Pepeja to the project? No problem, just share the project
