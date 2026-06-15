@@ -26,11 +26,15 @@ func New(svc *service.Services, secure bool) http.Handler {
 	s := &Server{svc: svc, secure: secure}
 
 	router := chi.NewMux()
-	api := humachi.New(router, huma.DefaultConfig("fossenCD", "0.1.0"))
-	api.UseMiddleware(s.sessionMiddleware)
+	router.Route("/api", func(r chi.Router) {
+		config := huma.DefaultConfig("fossenCD", "0.1.0")
+		config.Servers = []*huma.Server{{URL: "/api"}}
+		api := humachi.New(r, config)
+		api.UseMiddleware(s.sessionMiddleware)
 
-	s.registerAuth(api)
-	s.registerProjects(api)
+		s.registerAuth(api)
+		s.registerProjects(api)
+	})
 	return router
 }
 
