@@ -1,0 +1,49 @@
+services:
+  backend:
+    container_name: fossencd-backend
+    build:
+      context: backend
+      dockerfile: Dockerfile
+    image: fossencd-backend
+    volumes:
+      - ./backend:/app
+      - /app/tmp
+      - go_mod_cache:/go/pkg/mod
+      - ./data:/data
+    environment:
+      - FOSSENCD_DB=/data/fossencd.db
+      - FOSSENCD_DATA_DIR=/data/share
+    networks:
+      - dev-network
+
+  frontend:
+    container_name: fossencd-frontend
+    build:
+      context: ./frontend
+    image: fossencd-frontend
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    networks:
+      - dev-network
+
+  nginx:
+    image: nginx:latest
+    container_name: fossencd-nginx
+    ports:
+      - "8000:80"
+    volumes:
+      - ./nginx/development.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - dev-network
+
+networks:
+  dev-network:
+    driver: bridge
+
+volumes:
+  frontend_node_modules:
+  go_mod_cache:
