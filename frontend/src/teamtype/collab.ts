@@ -4,7 +4,7 @@ import { Decoration, EditorView, WidgetType } from '@codemirror/view';
 import type { DecorationSet, ViewUpdate } from '@codemirror/view';
 
 import { advanceCodePoints, codePointLength } from './codepoints';
-import type { Position, Range, WireDelta } from '@humanoidsandvichdispenser/teamtype-wasm';
+import type { Position, Range, WireDelta } from '@sandvichxyz/teamtype-wasm';
 
 export const remoteEdit = Annotation.define<boolean>();
 

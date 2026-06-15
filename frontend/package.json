@@ -21,7 +21,7 @@
     "@codemirror/commands": "^6.10.3",
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.43.1",
-    "@humanoidsandvichdispenser/teamtype-wasm": "file:../teamtype/crates/teamtype-wasm/pkg",
+    "@sandvichxyz/teamtype-wasm": "0.9.2-dev",
     "pinia": "^3.0.4",
     "vue": "^3.5.32",
     "vue-router": "^5.0.4"

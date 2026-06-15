@@ -7,8 +7,8 @@ import init, {
   type NodeInfo,
   type Range,
   type WireDelta,
-} from '@humanoidsandvichdispenser/teamtype-wasm';
-import wasmUrl from '@humanoidsandvichdispenser/teamtype-wasm/teamtype_wasm_bg.wasm?url';
+} from '@sandvichxyz/teamtype-wasm';
+import wasmUrl from '@sandvichxyz/teamtype-wasm/teamtype_wasm_bg.wasm?url';
 
 type ContentListener = (file: string, text: string) => void;
 type EditListener = (file: string, delta: WireDelta) => void;

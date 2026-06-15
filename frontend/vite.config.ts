@@ -13,7 +13,7 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    exclude: ['teamtype-wasm'],
+    exclude: ['@sandvichxyz/teamtype-wasm'],
   },
   server: {
     fs: {
