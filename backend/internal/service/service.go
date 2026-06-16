@@ -6,6 +6,8 @@ import (
 
 	"github.com/spf13/afero"
 	"gorm.io/gorm"
+
+	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/teamtype"
 )
 
 type Services struct {
@@ -20,6 +22,7 @@ type Options struct {
 	Relay      string
 	SessionTTL time.Duration
 	MintCtx    context.Context
+	Host       teamtype.Host
 }
 
 func New(o Options) *Services {
@@ -31,6 +34,7 @@ func New(o Options) *Services {
 			dataDir: o.DataDir,
 			relay:   o.Relay,
 			mintCtx: o.MintCtx,
+			host:    o.Host,
 		},
 	}
 }

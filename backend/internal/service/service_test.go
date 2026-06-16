@@ -32,5 +32,11 @@ func newServices(t *testing.T) *Services {
 		DataDir:    "data",
 		SessionTTL: time.Hour,
 		MintCtx:    context.Background(),
+		Host:       noopHost{},
 	})
 }
+
+type noopHost struct{}
+
+func (noopHost) EnsureHost(string) {}
+func (noopHost) Stop(string)       {}

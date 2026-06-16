@@ -18,6 +18,7 @@ type ProjectService struct {
 	dataDir string
 	relay   string
 	mintCtx context.Context
+	host    teamtype.Host
 }
 
 func (s *ProjectService) Create(ctx context.Context, ownerID uint, name string) (store.Project, error) {
@@ -55,6 +56,7 @@ func (s *ProjectService) Delete(ctx context.Context, ownerID uint, id string) er
 	if err := s.db.WithContext(ctx).Delete(&p).Error; err != nil {
 		return err
 	}
+	s.host.Stop(p.ID)
 	return s.fs.RemoveAll(s.shareDir(p.ID))
 }
 
@@ -63,6 +65,7 @@ func (s *ProjectService) Address(ctx context.Context, ownerID uint, id string) (
 	if err != nil {
 		return "", err
 	}
+	s.host.EnsureHost(id)
 	return key.SecretAddress(), nil
 }
 

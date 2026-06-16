@@ -15,6 +15,7 @@ import (
 	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/server"
 	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/service"
 	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/store"
+	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/teamtype"
 )
 
 func main() {
@@ -28,6 +29,15 @@ func main() {
 		log.Fatalf("open db: %v", err)
 	}
 
+	host := teamtype.NewHostManager(ctx, teamtype.HostOptions{
+		Bin:           cfg.TeamtypeBin,
+		DataDir:       cfg.DataDir,
+		WormholeRelay: cfg.Relay,
+		IrohRelay:     cfg.IrohRelay,
+		IrohPkarr:     cfg.IrohPkarr,
+		IrohDNSDomain: cfg.IrohDNSDomain,
+	})
+
 	svc := service.New(service.Options{
 		DB:         db,
 		FS:         afero.NewOsFs(),
@@ -35,6 +45,7 @@ func main() {
 		Relay:      cfg.Relay,
 		SessionTTL: 7 * 24 * time.Hour,
 		MintCtx:    ctx,
+		Host:       host,
 	})
 
 	handler := server.New(svc, false)
