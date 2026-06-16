@@ -39,6 +39,7 @@ type HostManager struct {
 	base  context.Context
 	mu    sync.Mutex
 	hosts map[string]*hostProc
+	run   func(ctx context.Context, id string) error
 }
 
 type hostProc struct {
@@ -56,11 +57,13 @@ func NewHostManager(base context.Context, opts HostOptions) *HostManager {
 	if opts.StopGrace == 0 {
 		opts.StopGrace = 5 * time.Second
 	}
-	return &HostManager{
+	m := &HostManager{
 		opts:  opts,
 		base:  base,
 		hosts: make(map[string]*hostProc),
 	}
+	m.run = m.execRun
+	return m
 }
 
 // EnsureHost ensures a host daemon is running for the given id. If not, it
@@ -118,7 +121,7 @@ func (m *HostManager) supervise(ctx context.Context, id string, h *hostProc) {
 	}
 }
 
-func (m *HostManager) run(ctx context.Context, id string) error {
+func (m *HostManager) execRun(ctx context.Context, id string) error {
 	cmd := exec.CommandContext(ctx, m.opts.Bin, m.args(id)...)
 	// the daemon only tears its network down on a signal, so stop gracefully
 	// with SIGTERM; SIGKILL after StopGrace if it hangs
