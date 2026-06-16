@@ -1,30 +1,35 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
 
 import { useTeamtypeStore } from '@/stores/teamtype';
+import { useProjectsStore } from '@/stores/projects';
 import TeamtypeEditor from '@/components/TeamtypeEditor.vue';
 
+const route = useRoute();
 const teamtype = useTeamtypeStore();
-const joinCode = ref('');
+const projects = useProjectsStore();
+
+const error = ref<string | null>(null);
 
 onMounted(async () => {
   await teamtype.start();
   teamtype.setName(`peer-${Math.floor(Math.random() * 1000)}`);
-});
 
-function connect() {
-  const code = joinCode.value.trim();
-  if (code) {
-    teamtype.connect(code);
+  try {
+    const address = await projects.address(route.params.id as string);
+    teamtype.connectByAddress(address);
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Could not connect to project';
   }
-}
+});
 </script>
 
 <template>
   <div class="editor-view">
     <header>
-      <input v-model="joinCode" placeholder="join code" @keyup.enter="connect" />
-      <button :disabled="!teamtype.ready" @click="connect">connect</button>
+      <span v-if="error" class="drop">{{ error }}</span>
+      <span v-else-if="!teamtype.ready" class="node">connecting…</span>
       <span v-if="teamtype.nodeInfo" class="node">
         node {{ teamtype.nodeInfo.node_id.slice(0, 12) }}…
       </span>

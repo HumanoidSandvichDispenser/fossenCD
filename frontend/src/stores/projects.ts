@@ -1,11 +1,13 @@
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
 
-import { listProjects, createProject, deleteProject } from '@/client/sdk.gen';
+import { listProjects, createProject, deleteProject, projectAddress } from '@/client/sdk.gen';
 import type { ProjectView } from '@/client/types.gen';
 import { useClientStore } from './client';
 
-/** Pull a human-readable message out of a huma ErrorModel response. */
+/**
+ * Pull a human-readable message out of a huma ErrorModel response.
+ */
 function errorMessage(error: unknown, fallback: string): string {
   if (error && typeof error === 'object') {
     const e = error as { detail?: string; title?: string };
@@ -21,7 +23,9 @@ export const useProjectsStore = defineStore('projects', () => {
   const projects = ref<ProjectView[]>([]);
   const loaded = ref(false);
 
-  /** Fetch the caller's projects. Deduped so concurrent callers share one request. */
+  /**
+   * Fetch the caller's projects. Deduped so concurrent callers share one request.
+   */
   async function list() {
     const { data } = await clientStore.wrap(listProjects)({ client });
     projects.value = data ?? [];
@@ -46,5 +50,23 @@ export const useProjectsStore = defineStore('projects', () => {
     projects.value = projects.value.filter((p) => p.id !== id);
   }
 
-  return { projects, loaded, list, create, remove };
+  /**
+   * Fetch a project's secret address for web peers to connect by.
+   */
+  async function address(id: string) {
+    const { data, error } = await projectAddress({ client, path: { id } });
+    if (error || !data) {
+      throw new Error(errorMessage(error, 'Could not load project address'));
+    }
+    return data.address;
+  }
+
+  return {
+    projects,
+    loaded,
+    list,
+    create,
+    remove,
+    address
+  };
 });

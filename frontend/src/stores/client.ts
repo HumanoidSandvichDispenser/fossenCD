@@ -28,15 +28,16 @@ export const useClientStore = defineStore('client', () => {
    * method name; pass `key` to fold params in for parameterised endpoints (e.g.
    * `getProject` keyed by id) so different args don't collide.
    *
-   * `F` is constrained to a promise-returning function so `ReturnType<F>` is
-   * thenable; the single cast bridges `call`'s `Promise<T>` to the SDK's
-   * `RequestResult` union, keeping the public signature exact for callers.
+   * `F` is left unconstrained so hey-api's `RequestResult` (a union of promises)
+   * is accepted as-is; the casts bridge it to `call`'s plain `Promise` and back
+   * to `ReturnType<F>`, keeping the public signature exact for callers.
    */
-  function wrap<F extends (...args: never[]) => Promise<unknown>>(
+  function wrap<F extends (...args: never[]) => unknown>(
     fn: F,
     key: (...args: Parameters<F>) => string = () => fn.name,
   ): (...args: Parameters<F>) => ReturnType<F> {
-    return (...args) => call(key(...args), () => fn(...args)) as ReturnType<F>;
+    return (...args) =>
+      call(key(...args), () => fn(...args) as Promise<unknown>) as ReturnType<F>;
   }
 
   return { client, call, wrap };

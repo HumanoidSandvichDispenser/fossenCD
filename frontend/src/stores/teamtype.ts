@@ -94,6 +94,10 @@ export const useTeamtypeStore = defineStore('teamtype', () => {
     client?.connectByJoinCode(joinCode);
   }
 
+  function connectByAddress(address: string) {
+    client?.connectByAddress(address);
+  }
+
   function setName(name: string) {
     client?.setName(name);
   }
@@ -121,6 +125,7 @@ export const useTeamtypeStore = defineStore('teamtype', () => {
     lastDisconnect,
     start,
     connect,
+    connectByAddress,
     setName,
     selectFile,
     applyEdit,
