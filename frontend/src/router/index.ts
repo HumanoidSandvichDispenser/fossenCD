@@ -22,7 +22,7 @@ const router = createRouter({
       path: '/projects',
       name: 'projects',
       component: ProjectsView,
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, chrome: true },
     },
     {
       path: '/editor/:id',

@@ -3,7 +3,6 @@ import { onMounted, ref } from 'vue';
 
 import { useProjectsStore } from '@/stores/projects';
 import type { ProjectView } from '@/client/types.gen';
-import UserMenu from '@/components/UserMenu.vue';
 import CreateProjectDialog from '@/components/CreateProjectDialog.vue';
 
 const projects = useProjectsStore();
@@ -50,12 +49,11 @@ async function remove(project: ProjectView) {
       <h1 class="h3">Projects</h1>
       <div class="spacer" />
       <button class="label-sm new" @click="dialogOpen = true">New project</button>
-      <UserMenu />
     </header>
 
     <p v-if="error" class="error text-sm">{{ error }}</p>
 
-    <p v-if="!projects.loaded" class="state text-sm">Loading…</p>
+    <p v-if="!projects.loaded" class="state text-sm">Loading...</p>
 
     <p v-else-if="projects.projects.length === 0" class="state text-sm">
       No projects yet. Create your first one.
@@ -72,7 +70,7 @@ async function remove(project: ProjectView) {
           :disabled="deleting === project.id"
           @click="remove(project)"
         >
-          {{ deleting === project.id ? 'Deleting…' : 'Delete' }}
+          {{ deleting === project.id ? 'Deleting...' : 'Delete' }}
         </button>
       </li>
     </ul>
