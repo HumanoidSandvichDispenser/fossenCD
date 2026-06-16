@@ -30,7 +30,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (hasCheckedAuth.value) {
       return user.value;
     }
-    const { data } = await clientStore.call('auth.me', () => me({ client }));
+    const { data } = await clientStore.wrap(me)({ client });
     user.value = data ?? null;
     hasCheckedAuth.value = true;
     return user.value;

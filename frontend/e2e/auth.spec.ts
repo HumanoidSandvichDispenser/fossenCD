@@ -1,11 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
 
-// These tests mock the backend at the network boundary (`page.route`), so they
-// exercise the frontend's auth behaviour — guard redirects, the login/register
-// toggle, the `?redirect` round-trip, session hydration and logout — without a
-// real server. The actual API + cookie handling is covered by the backend's own
-// e2e tests, so there is deliberately no full-stack test here.
-
 type MockUser = { id: number; username: string; email: string };
 
 const GOOD_PASSWORD = 'treehunter';
