@@ -44,6 +44,32 @@ func (s *AuthService) Logout(ctx context.Context, token string) error {
 	return s.db.WithContext(ctx).Where("token = ?", token).Delete(&store.Session{}).Error
 }
 
+// SetPassword replaces the password of the user with the given username and
+// revokes all of their existing sessions, forcing a re-login everywhere.
+func (s *AuthService) SetPassword(ctx context.Context, username, password string) (store.User, error) {
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		return store.User{}, err
+	}
+	var u store.User
+	if err := s.db.WithContext(ctx).Where("username = ?", username).First(&u).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return store.User{}, ErrNotFound
+		}
+		return store.User{}, err
+	}
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&u).Update("password_hash", hash).Error; err != nil {
+			return err
+		}
+		return tx.Where("user_id = ?", u.ID).Delete(&store.Session{}).Error
+	})
+	if err != nil {
+		return store.User{}, err
+	}
+	return u, nil
+}
+
 func (s *AuthService) ResolveSession(ctx context.Context, token string) (store.User, error) {
 	var sess store.Session
 	err := s.db.WithContext(ctx).
