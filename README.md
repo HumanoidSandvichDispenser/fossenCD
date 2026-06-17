@@ -9,7 +9,9 @@ implementation](https://github.com/humanoidsandvichdispenser/teamtype).
 
 This allows users to both edit documents collaboratively using a web-based
 editor and also edit documents locally with their own text editors, all while
-maintaining real-time synchronization across all peers.
+maintaining real-time synchronization across all peers. This combines the
+approachability of web-based text editing for users who prefer it with the
+flexibility of local text editing for users who prefer that workflow.
 
 ## WHAT IS THIS PROJECT ABOUT????
 
