@@ -10,7 +10,6 @@ import (
 // share dirs aren't enumerable; the teamtype key lives at <dataDir>/<ID>/.teamtype/key.
 type Project struct {
 	ID        string `gorm:"primaryKey"`
-	OwnerID   uint   `gorm:"index;not null"`
 	Name      string `gorm:"not null"`
 	CreatedAt time.Time
 }
