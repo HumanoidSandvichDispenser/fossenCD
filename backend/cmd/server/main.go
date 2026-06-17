@@ -24,7 +24,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	db, err := store.Open(sqlite.Open(cfg.DBPath))
+	db, err := store.Open(sqlite.Open(cfg.DBPath + "?_foreign_keys=on"))
 	if err != nil {
 		log.Fatalf("open db: %v", err)
 	}

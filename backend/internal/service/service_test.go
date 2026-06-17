@@ -14,7 +14,7 @@ import (
 
 func newServices(t *testing.T) *Services {
 	t.Helper()
-	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared&_foreign_keys=on", t.Name())
 	db, err := store.Open(sqlite.Open(dsn))
 	if err != nil {
 		t.Fatalf("open db: %v", err)

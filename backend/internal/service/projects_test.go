@@ -94,6 +94,30 @@ func TestDeleteRemovesShareDir(t *testing.T) {
 	}
 }
 
+func TestDeleteCascadesMembers(t *testing.T) {
+	svc := newServices(t)
+	ctx := context.Background()
+	a := ownerID(t, svc, "alice")
+	ownerID(t, svc, "bob")
+	p, _ := svc.Projects.Create(ctx, a, "alice-doc")
+
+	if err := svc.Projects.AddMember(ctx, a, p.ID, "bob"); err != nil {
+		t.Fatalf("add member: %v", err)
+	}
+
+	if err := svc.Projects.Delete(ctx, a, p.ID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	members, err := svc.Projects.projects.GetMembers(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("get members: %v", err)
+	}
+	if len(members) != 0 {
+		t.Fatalf("orphaned %d member rows after delete; FK cascade not firing", len(members))
+	}
+}
+
 func TestDeleteOtherUsersProject(t *testing.T) {
 	svc := newServices(t)
 	ctx := context.Background()

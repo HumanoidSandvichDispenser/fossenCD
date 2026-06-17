@@ -37,7 +37,7 @@ func main() {
 	}
 
 	cfg := config.Load()
-	db, err := store.Open(sqlite.Open(cfg.DBPath))
+	db, err := store.Open(sqlite.Open(cfg.DBPath + "?_foreign_keys=on"))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "open db:", err)
 		os.Exit(1)
