@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CreateProjectData, CreateProjectErrors, CreateProjectResponses, DeleteProjectData, DeleteProjectErrors, DeleteProjectResponses, GetProjectData, GetProjectErrors, GetProjectResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, MeData, MeErrors, MeResponses, ProjectAddressData, ProjectAddressErrors, ProjectAddressResponses, ProjectJoinCodeData, ProjectJoinCodeErrors, ProjectJoinCodeResponses, RegisterData, RegisterErrors, RegisterResponses } from './types.gen';
+import type { AddMemberData, AddMemberErrors, AddMemberResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, DeleteProjectData, DeleteProjectErrors, DeleteProjectResponses, GetProjectData, GetProjectErrors, GetProjectResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, MeData, MeErrors, MeResponses, ProjectAddressData, ProjectAddressErrors, ProjectAddressResponses, ProjectJoinCodeData, ProjectJoinCodeErrors, ProjectJoinCodeResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -88,3 +88,25 @@ export const projectAddress = <ThrowOnError extends boolean = false>(options: Op
  * Mint a wormhole join code for terminal peers
  */
 export const projectJoinCode = <ThrowOnError extends boolean = false>(options: Options<ProjectJoinCodeData, ThrowOnError>) => (options.client ?? client).post<ProjectJoinCodeResponses, ProjectJoinCodeErrors, ThrowOnError>({ url: '/projects/{id}/join-code', ...options });
+
+/**
+ * List a project's collaborators
+ */
+export const listMembers = <ThrowOnError extends boolean = false>(options: Options<ListMembersData, ThrowOnError>) => (options.client ?? client).get<ListMembersResponses, ListMembersErrors, ThrowOnError>({ url: '/projects/{id}/members', ...options });
+
+/**
+ * Add a collaborator by username or email (owner only)
+ */
+export const addMember = <ThrowOnError extends boolean = false>(options: Options<AddMemberData, ThrowOnError>) => (options.client ?? client).post<AddMemberResponses, AddMemberErrors, ThrowOnError>({
+    url: '/projects/{id}/members',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Remove a collaborator (owner only)
+ */
+export const removeMember = <ThrowOnError extends boolean = false>(options: Options<RemoveMemberData, ThrowOnError>) => (options.client ?? client).delete<RemoveMemberResponses, RemoveMemberErrors, ThrowOnError>({ url: '/projects/{id}/members/{userId}', ...options });

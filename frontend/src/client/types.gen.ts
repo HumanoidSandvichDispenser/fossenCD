@@ -4,6 +4,14 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}/api` | (string & {});
 };
 
+export type AddMemberInputBody = {
+    /**
+     * A URL to the JSON Schema for this object.
+     */
+    readonly $schema?: string;
+    login: string;
+};
+
 export type AddressBody = {
     /**
      * A URL to the JSON Schema for this object.
@@ -101,6 +109,13 @@ export type LoginInputBody = {
     username: string;
 };
 
+export type MemberView = {
+    email: string;
+    role: string;
+    user_id: number;
+    username: string;
+};
+
 export type ProjectView = {
     /**
      * A URL to the JSON Schema for this object.
@@ -129,6 +144,10 @@ export type UserView = {
     email: string;
     id: number;
     username: string;
+};
+
+export type AddMemberInputBodyWritable = {
+    login: string;
 };
 
 export type AddressBodyWritable = {
@@ -451,3 +470,85 @@ export type ProjectJoinCodeResponses = {
 };
 
 export type ProjectJoinCodeResponse = ProjectJoinCodeResponses[keyof ProjectJoinCodeResponses];
+
+export type ListMembersData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/projects/{id}/members';
+};
+
+export type ListMembersErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ListMembersError = ListMembersErrors[keyof ListMembersErrors];
+
+export type ListMembersResponses = {
+    /**
+     * OK
+     */
+    200: Array<MemberView> | null;
+};
+
+export type ListMembersResponse = ListMembersResponses[keyof ListMembersResponses];
+
+export type AddMemberData = {
+    body: AddMemberInputBodyWritable;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/projects/{id}/members';
+};
+
+export type AddMemberErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type AddMemberError = AddMemberErrors[keyof AddMemberErrors];
+
+export type AddMemberResponses = {
+    /**
+     * OK
+     */
+    200: Array<MemberView> | null;
+};
+
+export type AddMemberResponse = AddMemberResponses[keyof AddMemberResponses];
+
+export type RemoveMemberData = {
+    body?: never;
+    path: {
+        id: string;
+        userId: number;
+    };
+    query?: never;
+    url: '/projects/{id}/members/{userId}';
+};
+
+export type RemoveMemberErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type RemoveMemberError = RemoveMemberErrors[keyof RemoveMemberErrors];
+
+export type RemoveMemberResponses = {
+    /**
+     * No Content
+     */
+    204: void;
+};
+
+export type RemoveMemberResponse = RemoveMemberResponses[keyof RemoveMemberResponses];

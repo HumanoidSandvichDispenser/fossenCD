@@ -50,6 +50,21 @@ func (s *Server) registerProjects(api huma.API) {
 		OperationID: "project-join-code", Method: http.MethodPost, Path: "/projects/{id}/join-code",
 		Summary: "Mint a wormhole join code for terminal peers",
 	}, s.handleJoinCode)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "list-members", Method: http.MethodGet, Path: "/projects/{id}/members",
+		Summary: "List a project's collaborators",
+	}, s.handleListMembers)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "add-member", Method: http.MethodPost, Path: "/projects/{id}/members",
+		Summary: "Add a collaborator by username or email (owner only)",
+	}, s.handleAddMember)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "remove-member", Method: http.MethodDelete, Path: "/projects/{id}/members/{userId}",
+		Summary: "Remove a collaborator (owner only)", DefaultStatus: http.StatusNoContent,
+	}, s.handleRemoveMember)
 }
 
 type idInput struct {
@@ -152,4 +167,73 @@ func (s *Server) handleJoinCode(ctx context.Context, in *idInput) (*joinCodeOutp
 		return nil, httpError(err)
 	}
 	return &joinCodeOutput{Body: joinCodeBody{Code: code, Address: addr}}, nil
+}
+
+type memberView struct {
+	UserID   uint   `json:"user_id"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	Role     string `json:"role"`
+}
+
+func viewMember(m store.ProjectMember) memberView {
+	return memberView{UserID: m.UserID, Username: m.User.Username, Email: m.User.Email, Role: m.Role}
+}
+
+type membersOutput struct{ Body []memberView }
+
+// membersOf loads the project's members and shapes them for the response. Used
+// by both the list and add handlers so they return the same view.
+func (s *Server) membersOf(ctx context.Context, uid uint, id string) (*membersOutput, error) {
+	members, err := s.svc.Projects.ListMembers(ctx, uid, id)
+	if err != nil {
+		return nil, httpError(err)
+	}
+	out := &membersOutput{Body: make([]memberView, 0, len(members))}
+	for _, m := range members {
+		out.Body = append(out.Body, viewMember(m))
+	}
+	return out, nil
+}
+
+func (s *Server) handleListMembers(ctx context.Context, in *idInput) (*membersOutput, error) {
+	uid, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return s.membersOf(ctx, uid, in.ID)
+}
+
+type addMemberInput struct {
+	ID   string `path:"id"`
+	Body struct {
+		Login string `json:"login" minLength:"1"`
+	}
+}
+
+func (s *Server) handleAddMember(ctx context.Context, in *addMemberInput) (*membersOutput, error) {
+	uid, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.svc.Projects.AddMember(ctx, uid, in.ID, in.Body.Login); err != nil {
+		return nil, httpError(err)
+	}
+	return s.membersOf(ctx, uid, in.ID)
+}
+
+type removeMemberInput struct {
+	ID     string `path:"id"`
+	UserID uint   `path:"userId"`
+}
+
+func (s *Server) handleRemoveMember(ctx context.Context, in *removeMemberInput) (*struct{}, error) {
+	uid, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.svc.Projects.RemoveMember(ctx, uid, in.ID, in.UserID); err != nil {
+		return nil, httpError(err)
+	}
+	return nil, nil
 }
