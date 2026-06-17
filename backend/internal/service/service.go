@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/afero"
 	"gorm.io/gorm"
 
+	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/store"
 	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/teamtype"
 )
 
@@ -26,15 +27,19 @@ type Options struct {
 }
 
 func New(o Options) *Services {
+	projects := store.NewProjectStore(o.DB)
+	users := store.NewUserStore(o.DB)
+
 	return &Services{
 		Auth: &AuthService{db: o.DB, ttl: o.SessionTTL},
 		Projects: &ProjectService{
-			db:      o.DB,
-			fs:      o.FS,
-			dataDir: o.DataDir,
-			relay:   o.Relay,
-			mintCtx: o.MintCtx,
-			host:    o.Host,
+			projects: projects,
+			users:    users,
+			fs:       o.FS,
+			dataDir:  o.DataDir,
+			relay:    o.Relay,
+			mintCtx:  o.MintCtx,
+			host:     o.Host,
 		},
 	}
 }

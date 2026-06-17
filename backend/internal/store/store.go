@@ -19,7 +19,7 @@ func Open(dialector gorm.Dialector) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := db.AutoMigrate(&User{}, &Project{}, &Session{}); err != nil {
+	if err := db.AutoMigrate(&User{}, &Project{}, &ProjectMember{}, &Session{}); err != nil {
 		return nil, err
 	}
 	return db, nil

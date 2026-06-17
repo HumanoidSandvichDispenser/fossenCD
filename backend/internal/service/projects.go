@@ -6,62 +6,63 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/afero"
-	"gorm.io/gorm"
 
 	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/store"
 	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/teamtype"
 )
 
 type ProjectService struct {
-	db      *gorm.DB
-	fs      afero.Fs
-	dataDir string
-	relay   string
-	mintCtx context.Context
-	host    teamtype.Host
+	projects *store.ProjectStore
+	users    *store.UserStore
+	fs       afero.Fs
+	dataDir  string
+	relay    string
+	mintCtx  context.Context
+	host     teamtype.Host
 }
 
 func (s *ProjectService) Create(ctx context.Context, ownerID uint, name string) (store.Project, error) {
-	p := store.Project{OwnerID: ownerID, Name: name}
-	if err := s.db.WithContext(ctx).Create(&p).Error; err != nil {
+	p := store.Project{Name: name}
+	if err := s.projects.Create(ctx, &p, ownerID); err != nil {
 		return store.Project{}, err
 	}
+
+	// if the key can't be created, delete the project to avoid a broken state
 	if _, err := teamtype.EnsureKey(s.fs, s.shareDir(p.ID)); err != nil {
-		s.db.WithContext(ctx).Delete(&p)
+		_ = s.projects.Delete(ctx, p.ID)
 		return store.Project{}, err
 	}
 	return p, nil
 }
 
-func (s *ProjectService) List(ctx context.Context, ownerID uint) ([]store.Project, error) {
-	var ps []store.Project
-	err := s.db.WithContext(ctx).Where("owner_id = ?", ownerID).Order("created_at desc").Find(&ps).Error
-	return ps, err
+func (s *ProjectService) List(ctx context.Context, userID uint) ([]store.Project, error) {
+	return s.projects.ListUserProjects(ctx, userID)
 }
 
-func (s *ProjectService) Get(ctx context.Context, ownerID uint, id string) (store.Project, error) {
-	var p store.Project
-	err := s.db.WithContext(ctx).Where("id = ? AND owner_id = ?", id, ownerID).First(&p).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return store.Project{}, ErrNotFound
+func (s *ProjectService) Get(ctx context.Context, userID uint, id string) (store.Project, error) {
+	if err := s.access(ctx, userID, id); err != nil {
+		return store.Project{}, err
 	}
-	return p, err
-}
-
-func (s *ProjectService) Delete(ctx context.Context, ownerID uint, id string) error {
-	p, err := s.Get(ctx, ownerID, id)
+	p, err := s.projects.Get(ctx, id)
 	if err != nil {
-		return err
+		return store.Project{}, mapErr(err)
 	}
-	if err := s.db.WithContext(ctx).Delete(&p).Error; err != nil {
-		return err
-	}
-	s.host.Stop(p.ID)
-	return s.fs.RemoveAll(s.shareDir(p.ID))
+	return *p, nil
 }
 
-func (s *ProjectService) Address(ctx context.Context, ownerID uint, id string) (string, error) {
-	key, err := s.loadKey(ctx, ownerID, id)
+func (s *ProjectService) Delete(ctx context.Context, userID uint, id string) error {
+	if err := s.requireOwner(ctx, userID, id); err != nil {
+		return err
+	}
+	if err := s.projects.Delete(ctx, id); err != nil {
+		return err
+	}
+	s.host.Stop(id)
+	return s.fs.RemoveAll(s.shareDir(id))
+}
+
+func (s *ProjectService) Address(ctx context.Context, userID uint, id string) (string, error) {
+	key, err := s.loadKey(ctx, userID, id)
 	if err != nil {
 		return "", err
 	}
@@ -71,8 +72,8 @@ func (s *ProjectService) Address(ctx context.Context, ownerID uint, id string) (
 
 // MintJoinCode returns the code and address immediately; delivery to a peer runs
 // on the mint context for the server's lifetime.
-func (s *ProjectService) MintJoinCode(ctx context.Context, ownerID uint, id string) (code, address string, err error) {
-	key, err := s.loadKey(ctx, ownerID, id)
+func (s *ProjectService) MintJoinCode(ctx context.Context, userID uint, id string) (code, address string, err error) {
+	key, err := s.loadKey(ctx, userID, id)
 	if err != nil {
 		return "", "", err
 	}
@@ -84,8 +85,56 @@ func (s *ProjectService) MintJoinCode(ctx context.Context, ownerID uint, id stri
 	return code, key.SecretAddress(), nil
 }
 
-func (s *ProjectService) loadKey(ctx context.Context, ownerID uint, id string) (teamtype.Key, error) {
-	if _, err := s.Get(ctx, ownerID, id); err != nil {
+// AddMember adds login (username or email) to the project as a member. Owner only.
+func (s *ProjectService) AddMember(ctx context.Context, actorID uint, id, login string) error {
+	if err := s.requireOwner(ctx, actorID, id); err != nil {
+		return err
+	}
+	u, err := s.users.GetByLogin(ctx, login)
+	if err != nil {
+		return mapErr(err)
+	}
+	return s.projects.AddMember(ctx, id, u.ID, store.RoleMember)
+}
+
+// RemoveMember removes a user from the project. Owner only.
+func (s *ProjectService) RemoveMember(ctx context.Context, actorID uint, id string, userID uint) error {
+	if err := s.requireOwner(ctx, actorID, id); err != nil {
+		return err
+	}
+	return mapErr(s.projects.RemoveMember(ctx, id, userID))
+}
+
+func (s *ProjectService) ListMembers(ctx context.Context, userID uint, id string) ([]store.ProjectMember, error) {
+	if err := s.access(ctx, userID, id); err != nil {
+		return nil, err
+	}
+	return s.projects.GetMembers(ctx, id)
+}
+
+// access returns nil if the user is a member of the project.
+func (s *ProjectService) access(ctx context.Context, userID uint, id string) error {
+	if _, err := s.projects.GetMember(ctx, id, userID); err != nil {
+		return mapErr(err)
+	}
+	return nil
+}
+
+// requireOwner returns ErrNotFound if the user isn't a member, or ErrUnauthorized
+// if they're a member without the owner role.
+func (s *ProjectService) requireOwner(ctx context.Context, userID uint, id string) error {
+	m, err := s.projects.GetMember(ctx, id, userID)
+	if err != nil {
+		return mapErr(err)
+	}
+	if m.Role != store.RoleOwner {
+		return ErrUnauthorized
+	}
+	return nil
+}
+
+func (s *ProjectService) loadKey(ctx context.Context, userID uint, id string) (teamtype.Key, error) {
+	if err := s.access(ctx, userID, id); err != nil {
 		return teamtype.Key{}, err
 	}
 	return teamtype.LoadKey(s.fs, s.shareDir(id))
@@ -93,4 +142,18 @@ func (s *ProjectService) loadKey(ctx context.Context, ownerID uint, id string) (
 
 func (s *ProjectService) shareDir(id string) string {
 	return filepath.Join(s.dataDir, id)
+}
+
+// mapErr translates store sentinels to service sentinels.
+func mapErr(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, store.ErrNotFound):
+		return ErrNotFound
+	case errors.Is(err, store.ErrLastOwner):
+		return ErrConflict
+	default:
+		return err
+	}
 }

@@ -11,5 +11,4 @@ type User struct {
 	PasswordHash []byte
 	GoogleSub    *string `gorm:"uniqueIndex"`
 	CreatedAt    time.Time
-	Projects     []Project `gorm:"foreignKey:OwnerID"`
 }
