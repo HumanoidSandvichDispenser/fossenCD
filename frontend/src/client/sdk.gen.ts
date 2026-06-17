@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AddMemberData, AddMemberErrors, AddMemberResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, DeleteProjectData, DeleteProjectErrors, DeleteProjectResponses, GetProjectData, GetProjectErrors, GetProjectResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, MeData, MeErrors, MeResponses, ProjectAddressData, ProjectAddressErrors, ProjectAddressResponses, ProjectJoinCodeData, ProjectJoinCodeErrors, ProjectJoinCodeResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses } from './types.gen';
+import type { AddMemberData, AddMemberErrors, AddMemberResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, DeleteProjectData, DeleteProjectErrors, DeleteProjectResponses, GetProjectData, GetProjectErrors, GetProjectResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, MeData, MeErrors, MeResponses, ProjectAddressData, ProjectAddressErrors, ProjectAddressResponses, ProjectJoinCodeData, ProjectJoinCodeErrors, ProjectJoinCodeResponses, ProjectLogsData, ProjectLogsErrors, ProjectLogsResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -88,6 +88,11 @@ export const projectAddress = <ThrowOnError extends boolean = false>(options: Op
  * Mint a wormhole join code for terminal peers
  */
 export const projectJoinCode = <ThrowOnError extends boolean = false>(options: Options<ProjectJoinCodeData, ThrowOnError>) => (options.client ?? client).post<ProjectJoinCodeResponses, ProjectJoinCodeErrors, ThrowOnError>({ url: '/projects/{id}/join-code', ...options });
+
+/**
+ * View recent stdout/stderr of the project's teamtype daemon
+ */
+export const projectLogs = <ThrowOnError extends boolean = false>(options: Options<ProjectLogsData, ThrowOnError>) => (options.client ?? client).get<ProjectLogsResponses, ProjectLogsErrors, ThrowOnError>({ url: '/projects/{id}/logs', ...options });
 
 /**
  * List a project's collaborators

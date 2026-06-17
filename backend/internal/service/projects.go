@@ -112,6 +112,16 @@ func (s *ProjectService) ListMembers(ctx context.Context, userID uint, id string
 	return s.projects.GetMembers(ctx, id)
 }
 
+// Logs returns recent daemon output for the project and whether a host is
+// running. Any member may view it.
+func (s *ProjectService) Logs(ctx context.Context, userID uint, id string) (output string, running bool, err error) {
+	if err := s.access(ctx, userID, id); err != nil {
+		return "", false, err
+	}
+	output, running = s.host.Logs(id)
+	return output, running, nil
+}
+
 // access returns nil if the user is a member of the project.
 func (s *ProjectService) access(ctx context.Context, userID uint, id string) error {
 	if _, err := s.projects.GetMember(ctx, id, userID); err != nil {

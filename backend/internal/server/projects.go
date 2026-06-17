@@ -65,6 +65,11 @@ func (s *Server) registerProjects(api huma.API) {
 		OperationID: "remove-member", Method: http.MethodDelete, Path: "/projects/{id}/members/{userId}",
 		Summary: "Remove a collaborator (owner only)", DefaultStatus: http.StatusNoContent,
 	}, s.handleRemoveMember)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "project-logs", Method: http.MethodGet, Path: "/projects/{id}/logs",
+		Summary: "View recent stdout/stderr of the project's teamtype daemon",
+	}, s.handleProjectLogs)
 }
 
 type idInput struct {
@@ -236,4 +241,23 @@ func (s *Server) handleRemoveMember(ctx context.Context, in *removeMemberInput) 
 		return nil, httpError(err)
 	}
 	return nil, nil
+}
+
+type logsBody struct {
+	Running bool   `json:"running"`
+	Output  string `json:"output"`
+}
+
+type logsOutput struct{ Body logsBody }
+
+func (s *Server) handleProjectLogs(ctx context.Context, in *idInput) (*logsOutput, error) {
+	uid, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	output, running, err := s.svc.Projects.Logs(ctx, uid, in.ID)
+	if err != nil {
+		return nil, httpError(err)
+	}
+	return &logsOutput{Body: logsBody{Running: running, Output: output}}, nil
 }

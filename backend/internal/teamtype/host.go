@@ -3,6 +3,7 @@ package teamtype
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
@@ -30,7 +31,13 @@ type Host interface {
 	EnsureHost(id string)
 	// Stop terminates id's daemon and waits for exit.
 	Stop(id string)
+	// Logs returns the recent stdout+stderr captured for id's daemon, and
+	// whether a host is currently registered for id.
+	Logs(id string) (string, bool)
 }
+
+// maxLogBytes caps how much daemon output is retained per host.
+const maxLogBytes = 64 << 10
 
 var _ Host = (*HostManager)(nil)
 
@@ -45,6 +52,30 @@ type HostManager struct {
 type hostProc struct {
 	cancel context.CancelFunc
 	done   chan struct{}
+	log    *logBuffer
+}
+
+// logBuffer is a byte ring capturing the most recent daemon output.
+type logBuffer struct {
+	mu  sync.Mutex
+	buf []byte
+	max int
+}
+
+func (b *logBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.buf = append(b.buf, p...)
+	if len(b.buf) > b.max {
+		b.buf = b.buf[len(b.buf)-b.max:]
+	}
+	return len(p), nil
+}
+
+func (b *logBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return string(b.buf)
 }
 
 func NewHostManager(base context.Context, opts HostOptions) *HostManager {
@@ -75,7 +106,7 @@ func (m *HostManager) EnsureHost(id string) {
 		return
 	}
 	ctx, cancel := context.WithCancel(m.base)
-	h := &hostProc{cancel: cancel, done: make(chan struct{})}
+	h := &hostProc{cancel: cancel, done: make(chan struct{}), log: &logBuffer{max: maxLogBytes}}
 	m.hosts[id] = h
 	go m.supervise(ctx, id, h)
 }
@@ -94,6 +125,18 @@ func (m *HostManager) Stop(id string) {
 	}
 	h.cancel()
 	<-h.done
+}
+
+// Logs returns the recent stdout+stderr captured for id's daemon, and whether a
+// host is currently registered for id.
+func (m *HostManager) Logs(id string) (string, bool) {
+	m.mu.Lock()
+	h, ok := m.hosts[id]
+	m.mu.Unlock()
+	if !ok {
+		return "", false
+	}
+	return h.log.String(), true
 }
 
 func (m *HostManager) supervise(ctx context.Context, id string, h *hostProc) {
@@ -122,7 +165,20 @@ func (m *HostManager) supervise(ctx context.Context, id string, h *hostProc) {
 }
 
 func (m *HostManager) execRun(ctx context.Context, id string) error {
+	// we're the sole launcher per share dir, so a leftover socket means a
+	// prior daemon was killed without cleanup; remove it otherwise `teamtype
+	// share` will prompt to continue (y/N) waiting for stdin, which we don't
+	// have causing the daemon to exit and loop restarting until the socket is
+	// removed
+	_ = os.Remove(m.socketPath(id))
 	cmd := exec.CommandContext(ctx, m.opts.Bin, m.args(id)...)
+	m.mu.Lock()
+	h := m.hosts[id]
+	m.mu.Unlock()
+	if h != nil {
+		cmd.Stdout = h.log
+		cmd.Stderr = h.log
+	}
 	// the daemon only tears its network down on a signal, so stop gracefully
 	// with SIGTERM; SIGKILL after StopGrace if it hangs
 	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
@@ -152,4 +208,8 @@ func (m *HostManager) args(id string) []string {
 
 func (m *HostManager) shareDir(id string) string {
 	return filepath.Join(m.opts.DataDir, id)
+}
+
+func (m *HostManager) socketPath(id string) string {
+	return filepath.Join(m.shareDir(id), ".teamtype", "socket")
 }

@@ -38,5 +38,6 @@ func newServices(t *testing.T) *Services {
 
 type noopHost struct{}
 
-func (noopHost) EnsureHost(string) {}
-func (noopHost) Stop(string)       {}
+func (noopHost) EnsureHost(string)          {}
+func (noopHost) Stop(string)                {}
+func (noopHost) Logs(string) (string, bool) { return "", false }

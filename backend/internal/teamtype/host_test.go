@@ -2,6 +2,8 @@ package teamtype
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -100,4 +102,26 @@ func TestStopTerminatesAndWaits(t *testing.T) {
 func TestStopUnknownIsNoop(t *testing.T) {
 	m := newManager(t, time.Millisecond)
 	m.Stop("nope") // must not block or panic
+}
+
+// execRun must clear a leftover socket before launching, else `teamtype share`
+// prompts (y/N) on stdin we never connect and the supervisor crash-loops.
+func TestExecRunRemovesStaleSocket(t *testing.T) {
+	dir := t.TempDir()
+	m := NewHostManager(context.Background(), HostOptions{Bin: "true", DataDir: dir})
+
+	sock := m.socketPath("a")
+	if err := os.MkdirAll(filepath.Dir(sock), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sock, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := m.execRun(context.Background(), "a"); err != nil {
+		t.Fatalf("execRun: %v", err)
+	}
+	if _, err := os.Stat(sock); !os.IsNotExist(err) {
+		t.Fatalf("stale socket not removed: %v", err)
+	}
 }

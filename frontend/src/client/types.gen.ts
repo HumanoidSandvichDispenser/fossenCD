@@ -109,6 +109,15 @@ export type LoginInputBody = {
     username: string;
 };
 
+export type LogsBody = {
+    /**
+     * A URL to the JSON Schema for this object.
+     */
+    readonly $schema?: string;
+    output: string;
+    running: boolean;
+};
+
 export type MemberView = {
     email: string;
     role: string;
@@ -193,6 +202,11 @@ export type JoinCodeBodyWritable = {
 export type LoginInputBodyWritable = {
     password: string;
     username: string;
+};
+
+export type LogsBodyWritable = {
+    output: string;
+    running: boolean;
 };
 
 export type ProjectViewWritable = {
@@ -470,6 +484,33 @@ export type ProjectJoinCodeResponses = {
 };
 
 export type ProjectJoinCodeResponse = ProjectJoinCodeResponses[keyof ProjectJoinCodeResponses];
+
+export type ProjectLogsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/projects/{id}/logs';
+};
+
+export type ProjectLogsErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ProjectLogsError = ProjectLogsErrors[keyof ProjectLogsErrors];
+
+export type ProjectLogsResponses = {
+    /**
+     * OK
+     */
+    200: LogsBody;
+};
+
+export type ProjectLogsResponse = ProjectLogsResponses[keyof ProjectLogsResponses];
 
 export type ListMembersData = {
     body?: never;

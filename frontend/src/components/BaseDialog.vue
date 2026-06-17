@@ -34,7 +34,7 @@ watch(
   inset: 0;
   margin: auto;
   width: 100%;
-  max-width: var(--width-form);
+  max-width: var(--dialog-width, var(--width-form));
   height: fit-content;
   padding: 0;
   border: var(--border-thin) solid var(--color-border);

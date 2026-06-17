@@ -10,8 +10,9 @@ import {
   listMembers as listMembersReq,
   addMember as addMemberReq,
   removeMember as removeMemberReq,
+  projectLogs,
 } from '@/client/sdk.gen';
-import type { ProjectView, MemberView } from '@/client/types.gen';
+import type { ProjectView, MemberView, LogsBody } from '@/client/types.gen';
 import { useClientStore } from './client';
 
 /**
@@ -97,6 +98,15 @@ export const useProjectsStore = defineStore('projects', () => {
     return data;
   }
 
+  /** Fetch recent daemon output and whether a host is running. */
+  async function fetchLogs(id: string): Promise<LogsBody> {
+    const { data, error } = await projectLogs({ client, path: { id } });
+    if (error || !data) {
+      throw new Error(errorMessage(error, 'Could not load logs'));
+    }
+    return data;
+  }
+
   /** Remove a collaborator by user id. */
   async function removeMember(id: string, userId: number) {
     const { error } = await removeMemberReq({ client, path: { id, userId } });
@@ -116,5 +126,6 @@ export const useProjectsStore = defineStore('projects', () => {
     members,
     addMember,
     removeMember,
+    fetchLogs,
   };
 });
