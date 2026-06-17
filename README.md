@@ -13,6 +13,8 @@ maintaining real-time synchronization across all peers. This combines the
 approachability of web-based text editing for users who prefer it with the
 flexibility of local text editing for users who prefer that workflow.
 
+The [design document](docs/main.pdf) covers the full architecture.
+
 ## WHAT IS THIS PROJECT ABOUT????
 
 - Edit with multiple partners on the same Doc
