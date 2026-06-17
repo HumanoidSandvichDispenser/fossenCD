@@ -36,8 +36,7 @@ export const useClientStore = defineStore('client', () => {
     fn: F,
     key: (...args: Parameters<F>) => string = () => fn.name,
   ): (...args: Parameters<F>) => ReturnType<F> {
-    return (...args) =>
-      call(key(...args), () => fn(...args) as Promise<unknown>) as ReturnType<F>;
+    return (...args) => call(key(...args), () => fn(...args) as Promise<unknown>) as ReturnType<F>;
   }
 
   return { client, call, wrap };

@@ -25,9 +25,7 @@ async function logOut() {
     <span v-if="auth.user" class="text-sm user">
       {{ auth.user.username }}
     </span>
-    <button class="label-sm" @click="logOut">
-      Log out
-    </button>
+    <button class="label-sm" @click="logOut">Log out</button>
     <span v-if="error" class="error text-sm" role="alert">
       {{ error }}
     </span>

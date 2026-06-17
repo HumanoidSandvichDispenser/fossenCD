@@ -1,8 +1,17 @@
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
 
-import { listProjects, createProject, deleteProject, projectAddress } from '@/client/sdk.gen';
-import type { ProjectView } from '@/client/types.gen';
+import {
+  listProjects,
+  getProject,
+  createProject,
+  deleteProject,
+  projectAddress,
+  listMembers as listMembersReq,
+  addMember as addMemberReq,
+  removeMember as removeMemberReq,
+} from '@/client/sdk.gen';
+import type { ProjectView, MemberView } from '@/client/types.gen';
 import { useClientStore } from './client';
 
 /**
@@ -33,6 +42,15 @@ export const useProjectsStore = defineStore('projects', () => {
     return projects.value;
   }
 
+  /** Fetch a single project the caller has access to. */
+  async function get(id: string): Promise<ProjectView> {
+    const { data, error } = await getProject({ client, path: { id } });
+    if (error || !data) {
+      throw new Error(errorMessage(error, 'Could not load project'));
+    }
+    return data;
+  }
+
   async function create(name: string) {
     const { data, error } = await createProject({ client, body: { name } });
     if (error || !data) {
@@ -61,12 +79,42 @@ export const useProjectsStore = defineStore('projects', () => {
     return data.address;
   }
 
+  /** List a project's collaborators. */
+  async function members(id: string): Promise<MemberView[]> {
+    const { data, error } = await listMembersReq({ client, path: { id } });
+    if (error || !data) {
+      throw new Error(errorMessage(error, 'Could not load collaborators'));
+    }
+    return data;
+  }
+
+  /** Add a collaborator by username or email; returns the updated member list. */
+  async function addMember(id: string, login: string): Promise<MemberView[]> {
+    const { data, error } = await addMemberReq({ client, path: { id }, body: { login } });
+    if (error || !data) {
+      throw new Error(errorMessage(error, 'Could not add collaborator'));
+    }
+    return data;
+  }
+
+  /** Remove a collaborator by user id. */
+  async function removeMember(id: string, userId: number) {
+    const { error } = await removeMemberReq({ client, path: { id, userId } });
+    if (error) {
+      throw new Error(errorMessage(error, 'Could not remove collaborator'));
+    }
+  }
+
   return {
     projects,
     loaded,
     list,
+    get,
     create,
     remove,
-    address
+    address,
+    members,
+    addMember,
+    removeMember,
   };
 });

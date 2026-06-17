@@ -4,20 +4,30 @@ import { useRoute } from 'vue-router';
 
 import { useTeamtypeStore } from '@/stores/teamtype';
 import { useProjectsStore } from '@/stores/projects';
+import type { ProjectView } from '@/client/types.gen';
 import TeamtypeEditor from '@/components/TeamtypeEditor.vue';
+import ShareProjectDialog from '@/components/ShareProjectDialog.vue';
 
 const route = useRoute();
 const teamtype = useTeamtypeStore();
 const projects = useProjectsStore();
 
 const error = ref<string | null>(null);
+const project = ref<ProjectView | null>(null);
+const sharing = ref(false);
 
 onMounted(async () => {
+  const id = route.params.id as string;
   await teamtype.start();
   teamtype.setName(`peer-${Math.floor(Math.random() * 1000)}`);
 
+  projects
+    .get(id)
+    .then((p) => (project.value = p))
+    .catch(() => {});
+
   try {
-    const address = await projects.address(route.params.id as string);
+    const address = await projects.address(id);
     teamtype.connectByAddress(address);
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Could not connect to project';
@@ -37,7 +47,11 @@ onMounted(async () => {
       <span v-if="teamtype.lastDisconnect" class="drop">
         dropped: {{ teamtype.lastDisconnect.kind }}
       </span>
+      <span class="spacer" />
+      <button class="share" @click="sharing = true">Share</button>
     </header>
+
+    <ShareProjectDialog :open="sharing" :project="project" @close="sharing = false" />
 
     <main>
       <ul class="files">
@@ -80,6 +94,24 @@ header {
 .drop {
   color: #c0392b;
   font-size: 0.85rem;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.share {
+  padding: 0.25rem 0.75rem;
+  font-size: 0.85rem;
+  color: var(--color-text-inverse);
+  background: var(--color-primary);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.share:hover {
+  background: var(--color-accent-700);
 }
 
 main {

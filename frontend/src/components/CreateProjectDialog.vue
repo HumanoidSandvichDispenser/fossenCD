@@ -3,27 +3,24 @@ import { ref, watch } from 'vue';
 
 import { useProjectsStore } from '@/stores/projects';
 import type { ProjectView } from '@/client/types.gen';
+import BaseDialog from './BaseDialog.vue';
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: []; created: [project: ProjectView] }>();
 
 const projects = useProjectsStore();
 
-const dialog = ref<HTMLDialogElement | null>(null);
 const name = ref('');
 const error = ref<string | null>(null);
 const loading = ref(false);
 
-// Drive the native dialog from the `open` prop and reset state on each open.
+// Reset state each time the dialog opens.
 watch(
   () => props.open,
   (open) => {
     if (open) {
       name.value = '';
       error.value = null;
-      dialog.value?.showModal();
-    } else {
-      dialog.value?.close();
     }
   },
 );
@@ -48,7 +45,7 @@ async function submit() {
 </script>
 
 <template>
-  <dialog ref="dialog" class="dialog" @close="emit('close')">
+  <BaseDialog :open="open" @close="emit('close')">
     <form class="form" @submit.prevent="submit">
       <h2 class="h4">New project</h2>
 
@@ -73,33 +70,12 @@ async function submit() {
         </button>
       </div>
     </form>
-  </dialog>
+  </BaseDialog>
 </template>
 
 <style scoped>
-.dialog {
-  position: fixed;
-  inset: 0;
-  margin: auto;
-  width: 100%;
-  max-width: var(--width-form);
-  height: fit-content;
-  padding: 0;
-  border: var(--border-thin) solid var(--color-border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
-  background: var(--color-bg-card);
-}
-
-.dialog::backdrop {
-  background: rgba(15, 23, 42, 0.35);
-}
-
 .form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-6);
+  display: contents;
 }
 
 .field {

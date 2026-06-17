@@ -4,10 +4,12 @@ import { onMounted, ref } from 'vue';
 import { useProjectsStore } from '@/stores/projects';
 import type { ProjectView } from '@/client/types.gen';
 import CreateProjectDialog from '@/components/CreateProjectDialog.vue';
+import ShareProjectDialog from '@/components/ShareProjectDialog.vue';
 
 const projects = useProjectsStore();
 
 const dialogOpen = ref(false);
+const sharing = ref<ProjectView | null>(null);
 const error = ref<string | null>(null);
 const deleting = ref<string | null>(null);
 
@@ -65,6 +67,7 @@ async function remove(project: ProjectView) {
           <span class="name label-md">{{ project.name }}</span>
           <span class="meta text-xs">Created {{ formatDate(project.created_at) }}</span>
         </RouterLink>
+        <button class="label-sm share" @click="sharing = project">Share</button>
         <button
           class="label-sm delete"
           :disabled="deleting === project.id"
@@ -76,6 +79,7 @@ async function remove(project: ProjectView) {
     </ul>
 
     <CreateProjectDialog :open="dialogOpen" @close="dialogOpen = false" />
+    <ShareProjectDialog :open="sharing !== null" :project="sharing" @close="sharing = null" />
   </main>
 </template>
 
