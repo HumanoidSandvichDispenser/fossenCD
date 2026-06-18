@@ -7,12 +7,13 @@ import {
   createProject,
   deleteProject,
   projectAddress,
+  projectJoinCode,
   listMembers as listMembersReq,
   addMember as addMemberReq,
   removeMember as removeMemberReq,
   projectLogs,
 } from '@/client/sdk.gen';
-import type { ProjectView, MemberView, LogsBody } from '@/client/types.gen';
+import type { ProjectView, MemberView, LogsBody, JoinCodeBody } from '@/client/types.gen';
 import { useClientStore } from './client';
 
 /**
@@ -80,6 +81,15 @@ export const useProjectsStore = defineStore('projects', () => {
     return data.address;
   }
 
+  /** Mint (or reuse and extend) a wormhole join code for terminal peers. */
+  async function joinCode(id: string): Promise<JoinCodeBody> {
+    const { data, error } = await projectJoinCode({ client, path: { id } });
+    if (error || !data) {
+      throw new Error(errorMessage(error, 'Could not mint join code'));
+    }
+    return data;
+  }
+
   /** List a project's collaborators. */
   async function members(id: string): Promise<MemberView[]> {
     const { data, error } = await listMembersReq({ client, path: { id } });
@@ -123,6 +133,7 @@ export const useProjectsStore = defineStore('projects', () => {
     create,
     remove,
     address,
+    joinCode,
     members,
     addMember,
     removeMember,

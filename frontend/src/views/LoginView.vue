@@ -73,7 +73,7 @@ async function submit() {
 
       <p v-if="error" class="error text-sm">{{ error }}</p>
 
-      <button class="submit label-md" type="submit" :disabled="loading">
+      <button class="label-md btn btn-primary" type="submit" :disabled="loading">
         {{ loading ? 'Please wait…' : isRegister ? 'Create account' : 'Sign in' }}
       </button>
 
@@ -142,25 +142,6 @@ async function submit() {
 
 .error {
   color: var(--color-error);
-}
-
-.submit {
-  padding: var(--space-3);
-  color: var(--color-text-inverse);
-  background: var(--color-primary);
-  border: none;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: background var(--duration-fast) var(--ease-out);
-}
-
-.submit:hover:not(:disabled) {
-  background: var(--color-accent-700);
-}
-
-.submit:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 .toggle {

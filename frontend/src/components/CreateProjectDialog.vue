@@ -64,8 +64,8 @@ async function submit() {
       <p v-if="error" class="error text-sm">{{ error }}</p>
 
       <div class="actions">
-        <button type="button" class="label-md secondary" @click="emit('close')">Cancel</button>
-        <button type="submit" class="label-md primary" :disabled="loading">
+        <button type="button" class="label-md btn btn-secondary" @click="emit('close')">Cancel</button>
+        <button type="submit" class="label-md btn btn-primary" :disabled="loading">
           {{ loading ? 'Creating…' : 'Create' }}
         </button>
       </div>
@@ -109,36 +109,5 @@ async function submit() {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-3);
-}
-
-.actions button {
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-
-.primary {
-  color: var(--color-text-inverse);
-  background: var(--color-primary);
-  border: none;
-}
-
-.primary:hover:not(:disabled) {
-  background: var(--color-accent-700);
-}
-
-.primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.secondary {
-  color: var(--color-text);
-  background: var(--color-surface);
-  border: var(--border-thin) solid var(--color-border);
-}
-
-.secondary:hover {
-  background: var(--color-surface-hover);
 }
 </style>

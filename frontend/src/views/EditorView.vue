@@ -50,8 +50,8 @@ onMounted(async () => {
         dropped: {{ teamtype.lastDisconnect.kind }}
       </span>
       <span class="spacer" />
-      <button class="ghost" @click="showLogs = true">Logs</button>
-      <button class="share" @click="sharing = true">Share</button>
+      <button class="label-sm btn btn-sm btn-secondary" @click="showLogs = true">Logs</button>
+      <button class="label-sm btn btn-sm btn-primary" @click="sharing = true">Share / Connect</button>
     </header>
 
     <ShareProjectDialog :open="sharing" :project="project" @close="sharing = false" />
@@ -104,33 +104,6 @@ header {
   flex: 1;
 }
 
-.share {
-  padding: 0.25rem 0.75rem;
-  font-size: 0.85rem;
-  color: var(--color-text-inverse);
-  background: var(--color-primary);
-  border: none;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-
-.share:hover {
-  background: var(--color-accent-700);
-}
-
-.ghost {
-  padding: 0.25rem 0.75rem;
-  font-size: 0.85rem;
-  color: var(--color-text);
-  background: var(--color-surface);
-  border: var(--border-thin) solid var(--color-border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-
-.ghost:hover {
-  background: var(--color-surface-hover);
-}
 
 main {
   display: flex;

@@ -83,7 +83,7 @@ watch(
     <p v-if="error" class="error text-sm">{{ error }}</p>
 
     <div class="actions">
-      <button type="button" class="label-md secondary" @click="emit('close')">Done</button>
+      <button type="button" class="label-md btn btn-secondary" @click="emit('close')">Done</button>
     </div>
   </BaseDialog>
 </template>
@@ -152,18 +152,5 @@ watch(
   display: flex;
   justify-content: flex-end;
   gap: var(--space-3);
-}
-
-.secondary {
-  padding: var(--space-2) var(--space-4);
-  color: var(--color-text);
-  background: var(--color-surface);
-  border: var(--border-thin) solid var(--color-border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-
-.secondary:hover {
-  background: var(--color-surface-hover);
 }
 </style>

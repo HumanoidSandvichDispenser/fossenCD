@@ -98,6 +98,7 @@ export type JoinCodeBody = {
     readonly $schema?: string;
     address: string;
     code: string;
+    expires_at: string;
 };
 
 export type LoginInputBody = {
@@ -197,6 +198,7 @@ export type ErrorModelWritable = {
 export type JoinCodeBodyWritable = {
     address: string;
     code: string;
+    expires_at: string;
 };
 
 export type LoginInputBodyWritable = {

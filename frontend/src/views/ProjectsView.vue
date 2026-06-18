@@ -50,7 +50,7 @@ async function remove(project: ProjectView) {
     <header>
       <h1 class="h3">Projects</h1>
       <div class="spacer" />
-      <button class="label-sm new" @click="dialogOpen = true">New project</button>
+      <button class="label-sm btn btn-primary" @click="dialogOpen = true">New project</button>
     </header>
 
     <p v-if="error" class="error text-sm">{{ error }}</p>
@@ -67,9 +67,11 @@ async function remove(project: ProjectView) {
           <span class="name label-md">{{ project.name }}</span>
           <span class="meta text-xs">Created {{ formatDate(project.created_at) }}</span>
         </RouterLink>
-        <button class="label-sm share" @click="sharing = project">Share</button>
+        <button class="label-sm btn btn-sm btn-secondary" @click="sharing = project">
+          Share / Connect
+        </button>
         <button
-          class="label-sm delete"
+          class="label-sm btn btn-sm btn-danger"
           :disabled="deleting === project.id"
           @click="remove(project)"
         >
@@ -100,19 +102,6 @@ header {
 
 .spacer {
   flex: 1;
-}
-
-.new {
-  padding: var(--space-2) var(--space-4);
-  color: var(--color-text-inverse);
-  background: var(--color-primary);
-  border: none;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-
-.new:hover {
-  background: var(--color-accent-700);
 }
 
 .error {
@@ -170,22 +159,4 @@ header {
   color: var(--color-text-tertiary);
 }
 
-.delete {
-  padding: var(--space-2) var(--space-3);
-  color: var(--color-error);
-  background: transparent;
-  border: var(--border-thin) solid var(--color-border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-
-.delete:hover:not(:disabled) {
-  background: var(--color-error-light);
-  border-color: var(--color-error-200);
-}
-
-.delete:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
 </style>
