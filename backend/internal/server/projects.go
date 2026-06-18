@@ -156,8 +156,9 @@ func (s *Server) handleProjectAddress(ctx context.Context, in *idInput) (*addres
 }
 
 type joinCodeBody struct {
-	Code    string `json:"code"`
-	Address string `json:"address"`
+	Code      string    `json:"code"`
+	Address   string    `json:"address"`
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
 type joinCodeOutput struct{ Body joinCodeBody }
@@ -167,11 +168,12 @@ func (s *Server) handleJoinCode(ctx context.Context, in *idInput) (*joinCodeOutp
 	if err != nil {
 		return nil, err
 	}
-	code, addr, err := s.svc.Projects.MintJoinCode(ctx, uid, in.ID)
+	code, addr, expiresAt, err := s.svc.Projects.MintJoinCode(ctx, uid, in.ID)
 	if err != nil {
 		return nil, httpError(err)
 	}
-	return &joinCodeOutput{Body: joinCodeBody{Code: code, Address: addr}}, nil
+	body := joinCodeBody{Code: code, Address: addr, ExpiresAt: expiresAt}
+	return &joinCodeOutput{Body: body}, nil
 }
 
 type memberView struct {
