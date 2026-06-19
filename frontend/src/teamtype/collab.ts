@@ -170,6 +170,12 @@ export interface CollabHandlers {
 
 export function collab(handlers: CollabHandlers): Extension {
   const listener = EditorView.updateListener.of((update: ViewUpdate) => {
+    // ignore updates without any transactions (which occurs for example if
+    // the document is changed programmatically)
+    if (update.transactions.length === 0) {
+      return;
+    }
+
     const isRemote = update.transactions.some((tr) => tr.annotation(remoteEdit));
     if (isRemote) {
       return;

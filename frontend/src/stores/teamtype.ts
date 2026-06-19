@@ -83,6 +83,22 @@ export const useTeamtypeStore = defineStore('teamtype', () => {
     ready.value = true;
   }
 
+  /**
+   * Tear down the current peer and clear all per-project state so the store can
+   * call `start()` again to create a new peer.
+   */
+  function reset() {
+    client?.free();
+    client = null;
+    ready.value = false;
+    nodeInfo.value = null;
+    peers.value = [];
+    files.value = [];
+    currentFile.value = null;
+    lastDisconnect.value = null;
+    logs.value = [];
+  }
+
   function subscribe<T>(set: Set<T>, listener: T): () => void {
     set.add(listener);
     return () => {
@@ -124,6 +140,7 @@ export const useTeamtypeStore = defineStore('teamtype', () => {
     logs,
     lastDisconnect,
     start,
+    reset,
     connect,
     connectByAddress,
     setName,
