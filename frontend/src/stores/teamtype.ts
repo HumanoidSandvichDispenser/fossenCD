@@ -21,6 +21,8 @@ export const useTeamtypeStore = defineStore('teamtype', () => {
   const peers = ref<string[]>([]);
   const files = ref<string[]>([]);
   const currentFile = ref<string | null>(null);
+  // live text of the selected file
+  const currentText = ref('');
   const logs = ref<string[]>([]);
   const lastDisconnect = ref<DisconnectReason | null>(null);
 
@@ -53,7 +55,9 @@ export const useTeamtypeStore = defineStore('teamtype', () => {
       }
     });
     c.onFiles((f: string[]) => {
-      files.value = f;
+      // the peer emits files in an unstable order that reshuffles on edits;
+      // sort so the sidebar stays put
+      files.value = [...f].sort();
     });
     c.onFileContent((file: string, text: string) => {
       for (const listener of contentListeners) {
@@ -95,6 +99,7 @@ export const useTeamtypeStore = defineStore('teamtype', () => {
     peers.value = [];
     files.value = [];
     currentFile.value = null;
+    currentText.value = '';
     lastDisconnect.value = null;
     logs.value = [];
   }
@@ -137,6 +142,7 @@ export const useTeamtypeStore = defineStore('teamtype', () => {
     peers,
     files,
     currentFile,
+    currentText,
     logs,
     lastDisconnect,
     start,

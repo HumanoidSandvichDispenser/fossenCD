@@ -6,6 +6,7 @@ import { useTeamtypeStore } from '@/stores/teamtype';
 import { useProjectsStore } from '@/stores/projects';
 import type { ProjectView } from '@/client/types.gen';
 import TeamtypeEditor from '@/components/TeamtypeEditor.vue';
+import TypstPreview from '@/components/TypstPreview.vue';
 import ShareProjectDialog from '@/components/ShareProjectDialog.vue';
 import LogsDialog from '@/components/LogsDialog.vue';
 
@@ -27,6 +28,9 @@ const connected = computed(
     teamtype.ready &&
     teamtype.peers.length > 0,
 );
+
+// Typst rendering only makes sense for .typ files
+const isTypst = computed(() => teamtype.currentFile?.toLowerCase().endsWith('.typ') ?? false);
 
 // editor/preview split percentage
 const splitPercent = ref(55);
@@ -192,9 +196,12 @@ onBeforeUnmount(() => {
       </div>
 
       <section class="preview-pane">
-        <div class="preview-placeholder">
+        <TypstPreview v-if="isTypst" :source="teamtype.currentText" />
+        <div v-else class="preview-placeholder">
           <span class="preview-title serif-lg">Preview</span>
-          <span class="preview-sub text-sm">Typst rendering coming soon.</span>
+          <span class="preview-sub text-sm">
+            {{ teamtype.currentFile ? 'Preview is only available for .typ files.' : 'Select a file to preview.' }}
+          </span>
         </div>
       </section>
     </div>

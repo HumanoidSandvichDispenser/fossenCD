@@ -41,6 +41,13 @@ function makeState(file: string | null, doc: string): EditorState {
       drawSelection(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       EditorView.lineWrapping,
+      EditorView.updateListener.of((update) => {
+        // mirror the live document to the store so the preview can render it;
+        // covers both local typing and remotely-applied deltas
+        if (update.docChanged) {
+          teamtype.currentText = update.state.doc.toString();
+        }
+      }),
       editorPresentation,
       languageForFile(file),
       collab({
@@ -59,6 +66,18 @@ function makeState(file: string | null, doc: string): EditorState {
       }),
     ],
   });
+}
+
+/**
+ * Swap the editor to a new state and mirror its text to the store. Emits a
+ * `docChanged` event. This can be used for file switches.
+ */
+function showState(state: EditorState) {
+  if (!view) {
+    return;
+  }
+  view.setState(state);
+  teamtype.currentText = state.doc.toString();
 }
 
 function colorFor(id: string): string {
@@ -93,7 +112,7 @@ onMounted(() => {
       }
 
       if (view.state.doc.toString() !== text) {
-        view.setState(makeState(file, text));
+        showState(makeState(file, text));
         pushCursors();
       }
     }),
@@ -137,7 +156,7 @@ watch(() => teamtype.currentFile, (file, prev) => {
   if (!file) {
     // on deselect (project switch), clear editor state
     states.clear();
-    view.setState(makeState(null, ''));
+    showState(makeState(null, ''));
     pushCursors();
     return;
   }
@@ -148,7 +167,7 @@ watch(() => teamtype.currentFile, (file, prev) => {
     states.set(prev, view.state);
   }
 
-  view.setState(states.get(file) ?? makeState(file, ''));
+  showState(states.get(file) ?? makeState(file, ''));
   pushCursors();
 });
 
@@ -169,6 +188,7 @@ onBeforeUnmount(() => {
   height: 100%;
   overflow: auto;
 }
+
 .editor :deep(.cm-editor) {
   height: 100%;
 }
