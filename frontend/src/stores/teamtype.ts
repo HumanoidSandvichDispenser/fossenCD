@@ -40,8 +40,7 @@ export const useTeamtypeStore = defineStore('teamtype', () => {
   const files = computed(() => vfs.list());
   // the file shown in the editor (the one the user is editing)
   const currentFile = ref<string | null>(null);
-  // the file rendered in the preview pane (the build target) — independent of
-  // which file is being edited, like typst.app's preview selector
+  // the file rendered in the preview pane (the build target)
   const previewFile = ref<string | null>(null);
   const logs = ref<string[]>([]);
   const lastDisconnect = ref<DisconnectReason | null>(null);

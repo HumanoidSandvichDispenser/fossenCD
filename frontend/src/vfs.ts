@@ -105,8 +105,7 @@ export class VirtualFs {
   }
 
   /**
-   * Drop every entry, e.g. when switching projects. Deliberately silent — the
-   * watchers tear down with the project rather than reacting per file.
+   * Drop every entry, e.g. when switching projects.
    */
   clear(): void {
     this.entries.clear();

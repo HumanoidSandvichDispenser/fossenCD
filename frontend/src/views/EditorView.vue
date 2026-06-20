@@ -31,7 +31,7 @@ const connected = computed(
 );
 
 // Typst rendering only makes sense for .typ files; the preview tracks the
-// chosen build target, not whichever file is being edited
+// chosen build target
 const isTypst = computed(() => teamtype.previewFile?.toLowerCase().endsWith('.typ') ?? false);
 
 // editor pane width as a percentage of the whole workspace (the value the
@@ -348,9 +348,6 @@ onBeforeUnmount(() => {
 }
 
 .editor-pane {
-  /* Width driven by the drag handle via --editor-basis (set on .workspace).
-     No grow/shrink so the basis is the exact width and the divider sits where
-     the cursor dropped it; the preview pane absorbs the remaining space. */
   flex: 0 0 var(--editor-basis, 55%);
   min-width: 0;
   background: var(--color-bg-card);

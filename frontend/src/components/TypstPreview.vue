@@ -1,128 +1,143 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { dropSource, renderTypstFile, resetSources, syncSource } from '@/typst/compiler';
+import { compilerPort } from '@/typst/compiler';
+import { dropSource, resetSources, syncSource } from '@/typst/shadow-fs';
+import { CanvasPreview } from '@/typst/canvas-preview';
+import { isLogging, measure, recordSample } from '@/typst/perf';
+import { useCompileScheduler } from '@/composables/useCompileScheduler';
 import type { VirtualFs } from '@/vfs';
 
-const props = defineProps<{
-  // the file to render (the build target)
-  mainFile: string;
-  // the project filesystem to read sources from and watch for changes
-  vfs: VirtualFs;
-}>();
+const props = withDefaults(
+  defineProps<{
+    // the file to render (the build target)
+    mainFile: string;
+    // the project filesystem to read sources from and watch for changes
+    vfs: VirtualFs;
+    // display zoom: 1 = page rendered at its natural point size (A4 -> 595x842 CSS px)
+    zoom?: number;
+  }>(),
+  { zoom: 1 },
+);
 
-const svg = ref('');
+// The scrolling viewport (used as the IntersectionObserver root for culling) and
+// the centering host the preview renders into. Page display size is driven by
+// `zoom`.
+const scroller = ref<HTMLElement | null>(null);
+const host = ref<HTMLElement | null>(null);
 const error = ref<string | null>(null);
 // true only until the first compile resolves; afterwards we keep showing the
 // last good render while the next one compiles, to avoid an empty flicker
 const loading = ref(true);
+// becomes true once a render has actually painted into the host, so we can hide
+// the "Compiling"/"Nothing to preview" hints
+const hasRendered = ref(false);
 
-// Peer edits can arrive in bursts we don't control, so we coalesce them behind
-// a short quiet period. Our own typing instead recompiles as fast as the
-// compiler goes idle (see `compileWhenIdle`).
-const DEBOUNCE_MS = 250;
-let timer: ReturnType<typeof setTimeout> | null = null;
-// guards against overlapping compiles: while one runs, the next is deferred and
-// fired once it finishes, so the editor never queues a backlog of compiles
-let compiling = false;
-let pending = false;
+let preview: CanvasPreview | null = null;
 
-async function runCompile() {
-  compiling = true;
+// One compile + render cycle: sync the shadow FS, then rasterize the target.
+// Scheduling (debounce + overlap coalescing) is owned by `useCompileScheduler`;
+// this function is just the work, and is never called directly.
+async function compile() {
+  if (preview === null) {
+    return;
+  }
   loading.value = true;
+  const cycleStart = performance.now();
   try {
     // push the latest text of every file into the compiler's shadow FS
     // (unchanged files are skipped internally) before rendering the target.
     // Files registered without content yet are skipped.
-    for (const file of props.vfs.list()) {
-      const text = props.vfs.read(file);
-      if (text !== undefined) {
-        await syncSource(file, text);
+    await measure('sync', async () => {
+      for (const file of props.vfs.list()) {
+        const text = props.vfs.read(file);
+        if (text !== undefined) {
+          await syncSource(file, text);
+        }
       }
-    }
-    svg.value = await renderTypstFile(props.mainFile);
+    });
+    // compile + cull + raster are measured inside the renderer as 'compile',
+    // 'manip', 'raster' and 'rasterPage'.
+    await preview.render(props.mainFile);
+    hasRendered.value = true;
     error.value = null;
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
   } finally {
-    loading.value = false;
-    compiling = false;
-    if (pending) {
-      pending = false;
-      void runCompile();
+    // Record the whole cycle (sync + compile + raster, incl. any error path) as
+    // its own metric so report() shows end-to-end edit-to-pixels latency.
+    const total = performance.now() - cycleStart;
+    recordSample('total', total);
+    if (isLogging()) {
+      console.debug(`[typst] compile cycle ${Math.round(total * 10) / 10}ms`);
     }
+    loading.value = false;
   }
 }
 
-// Compile as soon as the compiler is free; if it's busy, run again right after.
-// Used for our own edits and build-target switches — no artificial delay.
-function compileWhenIdle() {
-  if (timer !== null) {
-    clearTimeout(timer);
-    timer = null;
-  }
-  if (compiling) {
-    pending = true;
-  } else {
-    void runCompile();
-  }
-}
-
-// Wait for a pause before compiling. Used for peer edits.
-function compileDebounced() {
-  if (timer !== null) {
-    clearTimeout(timer);
-  }
-  timer = setTimeout(() => {
-    timer = null;
-    compileWhenIdle();
-  }, DEBOUNCE_MS);
-}
+// Edits coalesce behind a short quiet period (rendering is main-thread work, so
+// we render once typing pauses rather than per keystroke); deliberate actions
+// (build-target switch, zoom) run via `whenIdle` with no delay.
+const scheduler = useCompileScheduler(compile);
 
 let unsubscribe: () => void = () => {};
 
 onMounted(async () => {
+  if (scroller.value !== null && host.value !== null) {
+    preview = new CanvasPreview(scroller.value, host.value, compilerPort, props.zoom);
+  }
   // start from a clean shadow FS so a previously-previewed project's files
   // don't linger in this one
   await resetSources();
-  // watch the VFS: our own edits recompile eagerly, peer edits are debounced,
-  // and removed files are evicted from the shadow FS
+  // watch the VFS: edits are debounced, and removed files are evicted from the
+  // shadow FS
   unsubscribe = props.vfs.subscribe((change) => {
     if (change.kind === 'delete') {
       void dropSource(change.path);
     }
-    if (change.origin === 'local') {
-      compileWhenIdle();
-    } else {
-      compileDebounced();
-    }
+    scheduler.debounced();
   });
-  compileWhenIdle();
+  scheduler.whenIdle();
 });
 
-// Switching the build target is a deliberate user action — render it at once.
-watch(() => props.mainFile, compileWhenIdle);
+// render whenever the build target changes
+watch(() => props.mainFile, scheduler.whenIdle);
+
+// Zoom changes rebuild at a new resolution; route through the compile path so
+// session access stays serialized with edits.
+watch(
+  () => props.zoom,
+  (z) => {
+    preview?.setZoom(z);
+    scheduler.whenIdle();
+  },
+);
 
 onBeforeUnmount(() => {
   unsubscribe();
-  if (timer !== null) {
-    clearTimeout(timer);
-  }
+  preview?.destroy();
+  scheduler.dispose();
 });
 </script>
 
 <template>
-  <div class="typst-preview">
+  <div ref="scroller" class="typst-preview">
     <pre v-if="error" class="preview-error code-sm">{{ error }}</pre>
-    <!-- eslint-disable-next-line vue/no-v-html -- SVG is produced by the Typst compiler from the user's own document -->
-    <div v-else-if="svg" class="preview-doc" v-html="svg" />
-    <div v-else-if="loading" class="preview-hint text-sm">Compiling&hellip;</div>
-    <div v-else class="preview-hint text-sm">Nothing to preview.</div>
+    <div ref="host" class="preview-doc" />
+    <div v-if="!error && loading && !hasRendered" class="preview-hint text-sm">
+      Compiling&hellip;
+    </div>
+    <div v-else-if="!error && !hasRendered" class="preview-hint text-sm">
+      Nothing to preview.
+    </div>
   </div>
 </template>
 
 <style scoped>
 .typst-preview {
   height: 100%;
+  /* This element is the scroll viewport (and the culling observer's root). At
+     high zoom a page can exceed the pane in both axes, so allow both scrolls. */
+  overflow: auto;
   padding: var(--space-6);
 }
 
@@ -130,17 +145,36 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-4);
+  /* Grow to the (zoomed) page width so a page wider than the pane scrolls from
+     the left edge instead of being clipped; stay >= pane width so a narrow page
+     stays centered. */
+  width: fit-content;
+  min-width: 100%;
 }
 
-.preview-doc :deep(svg) {
-  max-width: 100%;
-  height: auto;
+/* ts lowk buns just dont render this for now since it lags */
+.preview-doc :deep(.typst-html-semantics) {
+  display: none;
+}
+
+/* Page chrome lives on the renderer's per-page wrappers, never on the <canvas>
+   itself */
+.preview-doc :deep(.typst-page) {
   background: var(--color-bg-card);
   box-shadow: var(--shadow-md);
 }
 
+/* Space between stacked pages (the library stacks them with no gap). */
+.preview-doc :deep(.typst-page:not(:last-child)) {
+  margin-bottom: var(--space-4);
+}
+
 .preview-error {
+  /* Pin to the top of the viewport, layered over the (still laid-out) preview
+     so the last good render stays visible behind it. */
+  position: sticky;
+  top: 0;
+  z-index: 2;
   margin: 0;
   padding: var(--space-4);
   white-space: pre-wrap;
