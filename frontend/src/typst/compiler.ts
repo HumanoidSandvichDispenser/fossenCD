@@ -74,8 +74,7 @@ export async function resetSources(): Promise<void> {
 /**
  * Compile a project file to an SVG string, resolving any imports/includes
  * against the files synced via {@link syncSource}. Rejects if the source fails
- * to compile (the message is the compiler's diagnostic output). NOTE: not
- * incremental and lags like balls when the project is big.
+ * to compile (the message is the compiler's diagnostic output).
  */
 export function renderTypstFile(mainFile: string): Promise<string> {
   configure();

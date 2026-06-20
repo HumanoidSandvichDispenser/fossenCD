@@ -158,11 +158,7 @@ watch(() => teamtype.currentFile, (file, prev) => {
     states.set(prev, view.state);
   }
 
-  // The store keeps every opened file's live text current (edits stream for
-  // unfocused files too). Restore a cached state only if it still matches that
-  // text — otherwise it missed remote edits while unfocused, so rebuild from
-  // the store. Rebuilding drops that file's local undo history.
-  const text = teamtype.texts.get(file) ?? '';
+  const text = teamtype.read(file) ?? '';
   const cached = states.get(file);
   showState(cached && cached.doc.toString() === text ? cached : makeState(file, text));
   pushCursors();

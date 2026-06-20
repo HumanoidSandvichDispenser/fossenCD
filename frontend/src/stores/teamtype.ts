@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { reactive, ref } from 'vue';
+import { computed, markRaw, ref } from 'vue';
 import init, {
   TeamtypeClient,
   type DisconnectReason,
@@ -11,6 +11,7 @@ import init, {
 import wasmUrl from '@sandvichxyz/teamtype-wasm/teamtype_wasm_bg.wasm?url';
 
 import { applyWireDelta } from '@/teamtype/collab';
+import { VirtualFs } from '@/vfs';
 
 type ContentListener = (file: string, text: string) => void;
 type EditListener = (file: string, delta: WireDelta) => void;
@@ -29,25 +30,19 @@ function defaultPreviewFile(files: string[]): string | null {
 }
 
 export const useTeamtypeStore = defineStore('teamtype', () => {
+  const vfs = markRaw(new VirtualFs());
+
   const ready = ref(false);
   const nodeInfo = ref<NodeInfo | null>(null);
   const peers = ref<string[]>([]);
-  const files = ref<string[]>([]);
+  // the project's files live in the VFS (the single source of truth); the file
+  // list is just its registered paths
+  const files = computed(() => vfs.list());
   // the file shown in the editor (the one the user is editing)
   const currentFile = ref<string | null>(null);
   // the file rendered in the preview pane (the build target) — independent of
   // which file is being edited, like typst.app's preview selector
   const previewFile = ref<string | null>(null);
-  // live text of every opened file, kept current for the whole project so the
-  // compiler can resolve cross-file imports/includes. Reactive so the preview
-  // recompiles when any file changes; `revision` is a cheap change signal that
-  // avoids deep-watching the map.
-  const texts = reactive(new Map<string, string>());
-  // `revision` bumps on any text change; `localRevision` only on edits made
-  // here (our own typing). The preview uses the difference to tell whether a
-  // change came from us — compile-when-idle — or from a peer — debounced.
-  const revision = ref(0);
-  const localRevision = ref(0);
   const logs = ref<string[]>([]);
   const lastDisconnect = ref<DisconnectReason | null>(null);
 
@@ -61,14 +56,6 @@ export const useTeamtypeStore = defineStore('teamtype', () => {
   const opened = new Set<string>();
 
   let client: TeamtypeClient | null = null;
-
-  function setText(file: string, text: string, local = false) {
-    texts.set(file, text);
-    revision.value++;
-    if (local) {
-      localRevision.value++;
-    }
-  }
 
   // Open every project file we haven't opened yet, so edits stream for all of
   // them (not just the focused one) and the compiler stays whole-project.
@@ -106,22 +93,31 @@ export const useTeamtypeStore = defineStore('teamtype', () => {
       }
     });
     c.onFiles((f: string[]) => {
-      // the peer emits files in an unstable order that reshuffles on edits;
-      // sort so the sidebar stays put
-      files.value = [...f].sort();
+      // reconcile the VFS registry against the peer's authoritative list:
+      // drop files that disappeared, register ones we haven't seen yet (their
+      // content streams in via onFileContent once opened)
+      const incoming = new Set(f);
+      for (const path of vfs.list()) {
+        if (!incoming.has(path)) {
+          vfs.delete(path, 'remote');
+        }
+      }
+      for (const path of f) {
+        vfs.register(path, 'remote');
+      }
       openAll();
       if (!previewFile.value) {
-        previewFile.value = defaultPreviewFile(files.value);
+        previewFile.value = defaultPreviewFile(vfs.list());
       }
     });
     c.onFileContent((file: string, text: string) => {
-      setText(file, text);
+      vfs.write(file, text, 'remote');
       for (const listener of contentListeners) {
         listener(file, text);
       }
     });
     c.onEdit((file: string, delta: WireDelta) => {
-      setText(file, applyWireDelta(texts.get(file) ?? '', delta));
+      vfs.write(file, applyWireDelta(vfs.read(file) ?? '', delta), 'remote');
       for (const listener of editListeners) {
         listener(file, delta);
       }
@@ -154,11 +150,9 @@ export const useTeamtypeStore = defineStore('teamtype', () => {
     ready.value = false;
     nodeInfo.value = null;
     peers.value = [];
-    files.value = [];
     currentFile.value = null;
     previewFile.value = null;
-    texts.clear();
-    revision.value++;
+    vfs.clear();
     opened.clear();
     lastDisconnect.value = null;
     logs.value = [];
@@ -194,10 +188,19 @@ export const useTeamtypeStore = defineStore('teamtype', () => {
     previewFile.value = file;
   }
 
+  /**
+   * Returns the text of a file, or undefined if it has no content yet. Used by the
+   * editor to seed CodeMirror when switching files.
+   */
+  function read(file: string): string | undefined {
+    return vfs.read(file);
+  }
+
   function applyEdit(file: string, delta: WireDelta) {
-    // keep our own copy of the file's text in step with the edit we're sending,
-    // so the compiler sees local typing immediately
-    setText(file, applyWireDelta(texts.get(file) ?? '', delta), true);
+    // keep the VFS copy in step with the edit we're sending, so the compiler
+    // (which watches the VFS) sees local typing immediately. Tagged `local` so
+    // the preview recompiles eagerly rather than debounced.
+    vfs.write(file, applyWireDelta(vfs.read(file) ?? '', delta), 'local');
     client?.applyEdit(file, delta);
   }
 
@@ -206,15 +209,13 @@ export const useTeamtypeStore = defineStore('teamtype', () => {
   }
 
   return {
+    vfs,
     ready,
     nodeInfo,
     peers,
     files,
     currentFile,
     previewFile,
-    texts,
-    revision,
-    localRevision,
     logs,
     lastDisconnect,
     start,
@@ -224,6 +225,7 @@ export const useTeamtypeStore = defineStore('teamtype', () => {
     setName,
     selectFile,
     setPreviewFile,
+    read,
     applyEdit,
     setCursor,
     onContent: (listener: ContentListener) => subscribe(contentListeners, listener),

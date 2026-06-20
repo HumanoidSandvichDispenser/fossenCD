@@ -215,9 +215,7 @@ onBeforeUnmount(() => {
         <TypstPreview
           v-if="isTypst && teamtype.previewFile"
           :main-file="teamtype.previewFile"
-          :sources="teamtype.texts"
-          :revision="teamtype.revision"
-          :local-revision="teamtype.localRevision"
+          :vfs="teamtype.vfs"
         />
         <div v-else class="preview-placeholder">
           <span class="preview-title serif-lg">Preview</span>

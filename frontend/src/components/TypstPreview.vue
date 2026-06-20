@@ -1,17 +1,13 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { renderTypstFile, resetSources, syncSource } from '@/typst/compiler';
+import { dropSource, renderTypstFile, resetSources, syncSource } from '@/typst/compiler';
+import type { VirtualFs } from '@/vfs';
 
 const props = defineProps<{
   // the file to render (the build target)
   mainFile: string;
-  // live text of every opened project file, so cross-file imports resolve
-  sources: Map<string, string>;
-  // bumped whenever any source changes; our recompile trigger
-  revision: number;
-  // subset of `revision` counting only our own edits — those compile eagerly,
-  // peer edits are debounced
-  localRevision: number;
+  // the project filesystem to read sources from and watch for changes
+  vfs: VirtualFs;
 }>();
 
 const svg = ref('');
@@ -22,7 +18,7 @@ const loading = ref(true);
 
 // Peer edits can arrive in bursts we don't control, so we coalesce them behind
 // a short quiet period. Our own typing instead recompiles as fast as the
-// compiler goes idle (see `requestCompile`).
+// compiler goes idle (see `compileWhenIdle`).
 const DEBOUNCE_MS = 250;
 let timer: ReturnType<typeof setTimeout> | null = null;
 // guards against overlapping compiles: while one runs, the next is deferred and
@@ -35,9 +31,13 @@ async function runCompile() {
   loading.value = true;
   try {
     // push the latest text of every file into the compiler's shadow FS
-    // (unchanged files are skipped internally) before rendering the target
-    for (const [file, text] of props.sources) {
-      await syncSource(file, text);
+    // (unchanged files are skipped internally) before rendering the target.
+    // Files registered without content yet are skipped.
+    for (const file of props.vfs.list()) {
+      const text = props.vfs.read(file);
+      if (text !== undefined) {
+        await syncSource(file, text);
+      }
     }
     svg.value = await renderTypstFile(props.mainFile);
     error.value = null;
@@ -78,33 +78,32 @@ function compileDebounced() {
   }, DEBOUNCE_MS);
 }
 
+let unsubscribe: () => void = () => {};
+
 onMounted(async () => {
   // start from a clean shadow FS so a previously-previewed project's files
   // don't linger in this one
   await resetSources();
+  // watch the VFS: our own edits recompile eagerly, peer edits are debounced,
+  // and removed files are evicted from the shadow FS
+  unsubscribe = props.vfs.subscribe((change) => {
+    if (change.kind === 'delete') {
+      void dropSource(change.path);
+    }
+    if (change.origin === 'local') {
+      compileWhenIdle();
+    } else {
+      compileDebounced();
+    }
+  });
   compileWhenIdle();
 });
 
 // Switching the build target is a deliberate user action — render it at once.
 watch(() => props.mainFile, compileWhenIdle);
 
-// A text change: if our own edit count moved with it, it's local (eager);
-// otherwise it came from a peer (debounced).
-let lastLocal = props.localRevision;
-watch(
-  () => props.revision,
-  () => {
-    const isLocal = props.localRevision !== lastLocal;
-    lastLocal = props.localRevision;
-    if (isLocal) {
-      compileWhenIdle();
-    } else {
-      compileDebounced();
-    }
-  },
-);
-
 onBeforeUnmount(() => {
+  unsubscribe();
   if (timer !== null) {
     clearTimeout(timer);
   }
