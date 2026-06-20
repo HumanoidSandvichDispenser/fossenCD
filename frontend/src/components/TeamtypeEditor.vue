@@ -41,13 +41,6 @@ function makeState(file: string | null, doc: string): EditorState {
       drawSelection(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       EditorView.lineWrapping,
-      EditorView.updateListener.of((update) => {
-        // mirror the live document to the store so the preview can render it;
-        // covers both local typing and remotely-applied deltas
-        if (update.docChanged) {
-          teamtype.currentText = update.state.doc.toString();
-        }
-      }),
       editorPresentation,
       languageForFile(file),
       collab({
@@ -77,7 +70,6 @@ function showState(state: EditorState) {
     return;
   }
   view.setState(state);
-  teamtype.currentText = state.doc.toString();
 }
 
 function colorFor(id: string): string {
@@ -102,11 +94,10 @@ onMounted(() => {
 
   cleanups.push(
     teamtype.onContent((file, text) => {
-      // NOTE: this rebuilds the entire editor state even if we have loaded
-      // it before. this is because the WASM peer does not emit onEdit for
-      // changes to files that are not selected (but previously opened).
-      // We should change the WASM peer to keep track of opened files to
-      // receive onEdit for opened but unselected files.
+      // Seed the editor if the focused file's content arrives after it was
+      // selected. Edits to other opened files stream into the store's text map
+      // (the WASM peer now emits onEdit for every opened file), so switching to
+      // one rebuilds its state from there.
       if (!view || file !== teamtype.currentFile) {
         return;
       }
@@ -167,7 +158,13 @@ watch(() => teamtype.currentFile, (file, prev) => {
     states.set(prev, view.state);
   }
 
-  showState(states.get(file) ?? makeState(file, ''));
+  // The store keeps every opened file's live text current (edits stream for
+  // unfocused files too). Restore a cached state only if it still matches that
+  // text — otherwise it missed remote edits while unfocused, so rebuild from
+  // the store. Rebuilding drops that file's local undo history.
+  const text = teamtype.texts.get(file) ?? '';
+  const cached = states.get(file);
+  showState(cached && cached.doc.toString() === text ? cached : makeState(file, text));
   pushCursors();
 });
 

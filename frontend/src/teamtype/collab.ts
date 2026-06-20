@@ -49,6 +49,27 @@ export function changesToWireDelta(startDoc: Text, changes: ChangeSet): WireDelt
   return ops;
 }
 
+/**
+ * Apply a wire delta to a plain string, mirroring teamtype's
+ * `TextDelta::apply_to`. Offsets are counted in Unicode code points.
+ */
+export function applyWireDelta(text: string, ops: WireDelta): string {
+  let pos = 0;
+  let out = '';
+  for (const op of ops) {
+    if ('Retain' in op) {
+      const to = advanceCodePoints(text, pos, op.Retain);
+      out += text.slice(pos, to);
+      pos = to;
+    } else if ('Delete' in op) {
+      pos = advanceCodePoints(text, pos, op.Delete);
+    } else {
+      out += op.Insert;
+    }
+  }
+  return out + text.slice(pos);
+}
+
 export function wireDeltaToChanges(doc: Text, ops: WireDelta): ChangeSpec[] {
   const changes: ChangeSpec[] = [];
   let pos = 0;

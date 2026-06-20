@@ -13,7 +13,8 @@
         "@myriaddreamin/typst-ts-renderer": "^0.7.0",
         "@myriaddreamin/typst-ts-web-compiler": "^0.7.0",
         "@myriaddreamin/typst.ts": "^0.7.0",
-        "@sandvichxyz/teamtype-wasm": "0.9.2-dev.2",
+        "@phosphor-icons/vue": "^2.2.1",
+        "@sandvichxyz/teamtype-wasm": "0.9.2-dev.3",
         "codemirror-lang-typst": "^0.4.0",
         "pinia": "^3.0.4",
         "vue": "^3.5.32",
@@ -302,6 +303,8 @@
 
     "@oxlint/binding-win32-x64-msvc": ["@oxlint/binding-win32-x64-msvc@1.60.0", "", { "os": "win32", "cpu": "x64" }, "sha512-JOro4ZcfBLamJCyfURQmOQByoorgOdx3ZjAkSqnb/CyG/i+lN3KoV5LAgk5ZAW6DPq7/Cx7n23f8DuTWXTWgyQ=="],
 
+    "@phosphor-icons/vue": ["@phosphor-icons/vue@2.2.1", "", { "peerDependencies": { "vue": ">=3.2.39" } }, "sha512-3RNg1utc2Z5RwPKWFkW3eXI/0BfQAwXgtFxPUPeSzi55jGYUq16b+UqcgbKLazWFlwg5R92OCLKjDiJjeiJcnA=="],
+
     "@pkgjs/parseargs": ["@pkgjs/parseargs@0.11.0", "", {}, "sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg=="],
 
     "@playwright/test": ["@playwright/test@1.60.0", "", { "dependencies": { "playwright": "1.60.0" }, "bin": { "playwright": "cli.js" } }, "sha512-O71yZIbAh/PxDMNGns37GHBIfrVkEVyn+AXyIa5dOTfb4/xNvRWV+Vv/NMbNCtODB/pO7vLlF2OTmMVLhmr7Ag=="],
@@ -340,7 +343,7 @@
 
     "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.1", "", {}, "sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw=="],
 
-    "@sandvichxyz/teamtype-wasm": ["@sandvichxyz/teamtype-wasm@0.9.2-dev.2", "", {}, "sha512-bcRqbUqHB0aXgaYWSSNzrYWIzrPCyBUIk4VlcF4xuAiaSbEWRDyilJ+eumxbm5J+8k/MKFfOHmsiMVJ4jIk6OQ=="],
+    "@sandvichxyz/teamtype-wasm": ["@sandvichxyz/teamtype-wasm@0.9.2-dev.3", "", {}, "sha512-wha83KhVdMWV9yWgEVZPvlXoH0km/ak/409LgHRQeCDw7Y7xeYANC8dImATB11ffRqCwzrBkZS9Gj/jbAZdmuw=="],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 

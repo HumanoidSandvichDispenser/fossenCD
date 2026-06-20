@@ -29,9 +29,9 @@ export const editorTheme = EditorView.theme(
       padding: '0 var(--space-3) 0 var(--space-4)',
       minWidth: '2.75rem',
     },
-    '.cm-activeLine': {
-      backgroundColor: 'var(--color-accent-50)'
-    },
+    //'.cm-activeLine': {
+    //  backgroundColor: 'color-mix(in srgb, var(--color-accent-100) 50%, transparent)'
+    //},
     '.cm-activeLineGutter': {
       backgroundColor: 'var(--color-accent-50)',
       color: 'var(--color-text-secondary)',
@@ -42,9 +42,9 @@ export const editorTheme = EditorView.theme(
     '.cm-cursor': {
       borderLeftColor: 'var(--color-primary)'
     },
-    '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
-      backgroundColor: 'var(--color-accent-100)',
-    },
+    //'.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
+    //  backgroundColor: 'var(--color-accent-200)',
+    //},
   },
   { dark: false },
 );

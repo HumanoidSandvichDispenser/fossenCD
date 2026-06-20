@@ -7,6 +7,7 @@ import { useProjectsStore } from '@/stores/projects';
 import type { ProjectView } from '@/client/types.gen';
 import TeamtypeEditor from '@/components/TeamtypeEditor.vue';
 import TypstPreview from '@/components/TypstPreview.vue';
+import FileList from '@/components/FileList.vue';
 import ShareProjectDialog from '@/components/ShareProjectDialog.vue';
 import LogsDialog from '@/components/LogsDialog.vue';
 
@@ -29,26 +30,36 @@ const connected = computed(
     teamtype.peers.length > 0,
 );
 
-// Typst rendering only makes sense for .typ files
-const isTypst = computed(() => teamtype.currentFile?.toLowerCase().endsWith('.typ') ?? false);
+// Typst rendering only makes sense for .typ files; the preview tracks the
+// chosen build target, not whichever file is being edited
+const isTypst = computed(() => teamtype.previewFile?.toLowerCase().endsWith('.typ') ?? false);
 
-// editor/preview split percentage
+// editor pane width as a percentage of the whole workspace (the value the
+// editor pane's flex-basis resolves against)
 const splitPercent = ref(55);
 const workspace = ref<HTMLElement>();
-// cached during a drag; the workspace doesn't move while dragging, so we
-// measure it once instead of on every pointermove
-let dragRect: DOMRect | null = null;
+// smallest pixel width we let either the editor or the preview shrink to
+const MIN_PANE_PX = 160;
+// cached at drag start; the layout doesn't move while dragging, so we measure
+// the geometry once instead of on every pointermove. `paneLeft` is where the
+// editor pane begins (i.e. just past the sidebar), so the divider tracks the
+// cursor exactly rather than being offset by the sidebar width.
+let dragGeom: { paneLeft: number; workspaceWidth: number; paneAreaWidth: number } | null = null;
 
 function onDragMove(event: PointerEvent) {
-  if (!dragRect) {
+  if (!dragGeom) {
     return;
   }
-  const pct = ((event.clientX - dragRect.left) / dragRect.width) * 100;
-  splitPercent.value = Math.min(80, Math.max(20, pct));
+  const { paneLeft, workspaceWidth, paneAreaWidth } = dragGeom;
+  const min = Math.min(MIN_PANE_PX, paneAreaWidth / 2);
+  // editor width = cursor position relative to where the editor pane starts,
+  // clamped so the preview keeps at least `min` px
+  const editorWidth = Math.max(min, Math.min(paneAreaWidth - min, event.clientX - paneLeft));
+  splitPercent.value = (editorWidth / workspaceWidth) * 100;
 }
 
 function stopDrag() {
-  dragRect = null;
+  dragGeom = null;
   document.body.style.cursor = '';
   document.body.style.userSelect = '';
   window.removeEventListener('pointermove', onDragMove);
@@ -56,10 +67,18 @@ function stopDrag() {
 }
 
 function startDrag() {
-  if (!workspace.value) {
+  const pane = workspace.value?.querySelector('.editor-pane');
+  if (!workspace.value || !pane) {
     return;
   }
-  dragRect = workspace.value.getBoundingClientRect();
+  const ws = workspace.value.getBoundingClientRect();
+  const paneLeft = pane.getBoundingClientRect().left;
+  dragGeom = {
+    paneLeft,
+    workspaceWidth: ws.width,
+    // the editor + divider + preview region (everything past the sidebar)
+    paneAreaWidth: ws.right - paneLeft,
+  };
   document.body.style.cursor = 'col-resize';
   document.body.style.userSelect = 'none';
   window.addEventListener('pointermove', onDragMove);
@@ -176,16 +195,13 @@ onBeforeUnmount(() => {
     <LogsDialog :open="showLogs" :project="project" @close="showLogs = false" />
 
     <div v-if="connected" ref="workspace" class="workspace" :style="{ '--editor-basis': `${splitPercent}%` }">
-      <aside class="sidebar">
-        <div class="sidebar-head label-xs">Files</div>
-        <ul v-if="teamtype.files.length" class="files">
-          <li v-for="file in teamtype.files" :key="file" class="file-item label-sm"
-            :class="{ active: file === teamtype.currentFile }" @click="teamtype.selectFile(file)">
-            {{ file }}
-          </li>
-        </ul>
-        <p v-else class="sidebar-empty text-xs">No files yet.</p>
-      </aside>
+      <FileList
+        :files="teamtype.files"
+        :current-file="teamtype.currentFile"
+        :preview-file="teamtype.previewFile"
+        @select="teamtype.selectFile($event)"
+        @preview="teamtype.setPreviewFile($event)"
+      />
 
       <section class="editor-pane">
         <TeamtypeEditor class="editor" />
@@ -196,11 +212,17 @@ onBeforeUnmount(() => {
       </div>
 
       <section class="preview-pane">
-        <TypstPreview v-if="isTypst" :source="teamtype.currentText" />
+        <TypstPreview
+          v-if="isTypst && teamtype.previewFile"
+          :main-file="teamtype.previewFile"
+          :sources="teamtype.texts"
+          :revision="teamtype.revision"
+          :local-revision="teamtype.localRevision"
+        />
         <div v-else class="preview-placeholder">
           <span class="preview-title serif-lg">Preview</span>
           <span class="preview-sub text-sm">
-            {{ teamtype.currentFile ? 'Preview is only available for .typ files.' : 'Select a file to preview.' }}
+            {{ teamtype.previewFile ? 'Preview is only available for .typ files.' : 'Select a file to preview.' }}
           </span>
         </div>
       </section>
@@ -327,58 +349,11 @@ onBeforeUnmount(() => {
   min-height: 0;
 }
 
-.sidebar {
-  width: 13rem;
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  padding: var(--space-3) var(--space-2);
-  background: var(--color-bg-card);
-  border-right: var(--border-thin) solid var(--color-border);
-  overflow: auto;
-}
-
-.sidebar-head {
-  padding: var(--space-1) var(--space-2) var(--space-3);
-  color: var(--color-text-tertiary);
-}
-
-.files {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.file-item {
-  padding: var(--space-2) var(--space-3);
-  color: var(--color-text-secondary);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: background var(--duration-fast) var(--ease-out);
-}
-
-.file-item:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-text);
-}
-
-.file-item.active {
-  background: var(--color-primary-light);
-  color: var(--color-primary);
-}
-
-.sidebar-empty {
-  padding: var(--space-2) var(--space-3);
-  color: var(--color-text-tertiary);
-}
-
 .editor-pane {
-  /* Width driven by the drag handle via --editor-basis (set on .workspace). */
-  flex: 1 1 var(--editor-basis, 55%);
+  /* Width driven by the drag handle via --editor-basis (set on .workspace).
+     No grow/shrink so the basis is the exact width and the divider sits where
+     the cursor dropped it; the preview pane absorbs the remaining space. */
+  flex: 0 0 var(--editor-basis, 55%);
   min-width: 0;
   background: var(--color-bg-card);
   overflow: hidden;
@@ -426,7 +401,8 @@ onBeforeUnmount(() => {
 
 /* Preview pane */
 .preview-pane {
-  flex: 1 1 auto;
+  /* Fill whatever the sidebar, editor pane and divider leave behind. */
+  flex: 1 1 0;
   min-width: 0;
   overflow: auto;
   background: var(--color-bg-page);

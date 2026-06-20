@@ -1,8 +1,18 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue';
-import { renderTypstSvg } from '@/typst/compiler';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { renderTypstFile, resetSources, syncSource } from '@/typst/compiler';
 
-const props = defineProps<{ source: string }>();
+const props = defineProps<{
+  // the file to render (the build target)
+  mainFile: string;
+  // live text of every opened project file, so cross-file imports resolve
+  sources: Map<string, string>;
+  // bumped whenever any source changes; our recompile trigger
+  revision: number;
+  // subset of `revision` counting only our own edits — those compile eagerly,
+  // peer edits are debounced
+  localRevision: number;
+}>();
 
 const svg = ref('');
 const error = ref<string | null>(null);
@@ -10,44 +20,88 @@ const error = ref<string | null>(null);
 // last good render while the next one compiles, to avoid an empty flicker
 const loading = ref(true);
 
-// recompiling on every keystroke is wasteful and Typst compiles are not free,
-// so we wait for a short pause in edits before rendering
+// Peer edits can arrive in bursts we don't control, so we coalesce them behind
+// a short quiet period. Our own typing instead recompiles as fast as the
+// compiler goes idle (see `requestCompile`).
 const DEBOUNCE_MS = 250;
 let timer: ReturnType<typeof setTimeout> | null = null;
-// bumped per request so a slow compile can't overwrite a newer one's result
-let seq = 0;
+// guards against overlapping compiles: while one runs, the next is deferred and
+// fired once it finishes, so the editor never queues a backlog of compiles
+let compiling = false;
+let pending = false;
 
-async function compile(source: string) {
-  const token = ++seq;
+async function runCompile() {
+  compiling = true;
+  loading.value = true;
   try {
-    const result = await renderTypstSvg(source);
-    if (token === seq) {
-      svg.value = result;
-      error.value = null;
+    // push the latest text of every file into the compiler's shadow FS
+    // (unchanged files are skipped internally) before rendering the target
+    for (const [file, text] of props.sources) {
+      await syncSource(file, text);
     }
+    svg.value = await renderTypstFile(props.mainFile);
+    error.value = null;
   } catch (e) {
-    if (token === seq) {
-      error.value = e instanceof Error ? e.message : String(e);
-    }
+    error.value = e instanceof Error ? e.message : String(e);
   } finally {
-    if (token === seq) {
-      loading.value = false;
+    loading.value = false;
+    compiling = false;
+    if (pending) {
+      pending = false;
+      void runCompile();
     }
   }
 }
 
+// Compile as soon as the compiler is free; if it's busy, run again right after.
+// Used for our own edits and build-target switches — no artificial delay.
+function compileWhenIdle() {
+  if (timer !== null) {
+    clearTimeout(timer);
+    timer = null;
+  }
+  if (compiling) {
+    pending = true;
+  } else {
+    void runCompile();
+  }
+}
+
+// Wait for a pause before compiling. Used for peer edits.
+function compileDebounced() {
+  if (timer !== null) {
+    clearTimeout(timer);
+  }
+  timer = setTimeout(() => {
+    timer = null;
+    compileWhenIdle();
+  }, DEBOUNCE_MS);
+}
+
+onMounted(async () => {
+  // start from a clean shadow FS so a previously-previewed project's files
+  // don't linger in this one
+  await resetSources();
+  compileWhenIdle();
+});
+
+// Switching the build target is a deliberate user action — render it at once.
+watch(() => props.mainFile, compileWhenIdle);
+
+// A text change: if our own edit count moved with it, it's local (eager);
+// otherwise it came from a peer (debounced).
+let lastLocal = props.localRevision;
 watch(
-  () => props.source,
-  (source) => {
-    if (timer !== null) {
-      clearTimeout(timer);
+  () => props.revision,
+  () => {
+    const isLocal = props.localRevision !== lastLocal;
+    lastLocal = props.localRevision;
+    if (isLocal) {
+      compileWhenIdle();
+    } else {
+      compileDebounced();
     }
-    timer = setTimeout(() => {
-      timer = null;
-      void compile(source);
-    }, DEBOUNCE_MS);
   },
-  { immediate: true },
 );
 
 onBeforeUnmount(() => {
