@@ -6,6 +6,7 @@ import { useZoom } from '@/composables/useZoom';
 import TeamtypeEditor from '@/components/TeamtypeEditor.vue';
 import TypstPreview from '@/components/TypstPreview.vue';
 import FileList from '@/components/FileList.vue';
+import ZoomBar from './workspace/ZoomBar.vue';
 
 const teamtype = useTeamtypeStore();
 
@@ -18,15 +19,7 @@ const isTypst = computed(() => teamtype.previewFile?.toLowerCase().endsWith('.ty
 const splitPercent = ref(55);
 const split = ref<HTMLElement>();
 
-const {
-  zoom,
-  zoomLabel,
-  canZoomIn,
-  canZoomOut,
-  zoomIn,
-  zoomOut,
-  resetZoom
-} = useZoom();
+const zoomState = useZoom();
 
 // smallest pixel width we let either the editor or the preview shrink to
 const MIN_PANE_PX = 160;
@@ -99,25 +92,7 @@ onBeforeUnmount(stopDrag);
       <div class="toolbar toolbar-preview">
         <div class="toolbar-group">
           <!-- start: preview controls -->
-          <button
-            class="btn btn-sm btn-secondary"
-            :disabled="!canZoomOut"
-            aria-label="Zoom out"
-            @click="zoomOut"
-          >
-            &minus;
-          </button>
-          <button class="zoom-value label-sm" title="Reset zoom" @click="resetZoom">
-            {{ zoomLabel }}
-          </button>
-          <button
-            class="btn btn-sm btn-secondary"
-            :disabled="!canZoomIn"
-            aria-label="Zoom in"
-            @click="zoomIn"
-          >
-            +
-          </button>
+          <ZoomBar :zoomState="zoomState" />
         </div>
         <div class="toolbar-group">
           <!-- middle -->
@@ -136,16 +111,22 @@ onBeforeUnmount(stopDrag);
       </section>
 
       <section class="preview-pane">
+        <!-- unsure what pattern to use once we have multiple preview types -->
         <TypstPreview
           v-if="isTypst && teamtype.previewFile"
           :main-file="teamtype.previewFile"
           :vfs="teamtype.vfs"
-          :zoom="zoom"
+          :zoom="zoomState.zoom.value"
         />
         <div v-else class="preview-placeholder">
           <span class="preview-title serif-lg">Preview</span>
           <span class="preview-sub text-sm">
-            {{ teamtype.previewFile ? 'Preview is only available for .typ files.' : 'Select a file to preview.' }}
+            <template v-if="teamtype.previewFile">
+              Preview is currently not available for <code>{{ teamtype.previewFile }}</code>.
+            </template>
+            <template v-else>
+              Select a file to preview.
+            </template>
           </span>
         </div>
       </section>

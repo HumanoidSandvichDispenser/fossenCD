@@ -1,4 +1,4 @@
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 
 export function useZoom(initialZoom = 1) {
   const zoom = ref(initialZoom);
@@ -15,9 +15,16 @@ export function useZoom(initialZoom = 1) {
 
   const canZoomIn = computed(() => zoom.value < maxZoom.value);
 
+  watch(zoom, (value) => {
+    const clamped = Math.min(Math.max(value, minZoom.value), maxZoom.value);
+    const rounded = Math.round(clamped * 100) / 100;
+    if (rounded !== value) {
+      zoom.value = rounded;
+    }
+  });
+
   function zoomBy(delta: number) {
-    const targetZoom = Math.round((zoom.value + delta) * 100) / 100;
-    zoom.value = Math.min(Math.max(targetZoom, minZoom.value), maxZoom.value);
+    zoom.value += delta;
   }
 
   function zoomIn() {
