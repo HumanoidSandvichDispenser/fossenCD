@@ -3,10 +3,12 @@ import { computed, onBeforeUnmount, ref } from 'vue';
 
 import { useTeamtypeStore } from '@/stores/teamtype';
 import { useZoom } from '@/composables/useZoom';
+import { useCompileStatus } from '@/composables/useCompileStatus';
 import TeamtypeEditor from '@/components/TeamtypeEditor.vue';
 import TypstPreview from '@/components/TypstPreview.vue';
 import FileList from '@/components/FileList.vue';
 import ZoomBar from './workspace/ZoomBar.vue';
+import CompileStatus from './workspace/CompileStatus.vue';
 
 const teamtype = useTeamtypeStore();
 
@@ -20,6 +22,7 @@ const splitPercent = ref(55);
 const split = ref<HTMLElement>();
 
 const zoomState = useZoom();
+const compileStatus = useCompileStatus();
 
 // smallest pixel width we let either the editor or the preview shrink to
 const MIN_PANE_PX = 160;
@@ -99,6 +102,7 @@ onBeforeUnmount(stopDrag);
         </div>
         <div class="toolbar-group">
           <!-- end -->
+          <CompileStatus :status="compileStatus" />
         </div>
       </div>
 
@@ -117,6 +121,7 @@ onBeforeUnmount(stopDrag);
           :main-file="teamtype.previewFile"
           :vfs="teamtype.vfs"
           :zoom="zoomState.zoom.value"
+          :compile-status="compileStatus"
         />
         <div v-else class="preview-placeholder">
           <span class="preview-title serif-lg">Preview</span>

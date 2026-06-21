@@ -5,6 +5,7 @@ import { dropSource, resetSources, syncSource } from '@/typst/shadow-fs';
 import { CanvasPreview } from '@/typst/canvas-preview';
 import { isLogging, measure, recordSample } from '@/typst/perf';
 import { useCompileScheduler } from '@/composables/useCompileScheduler';
+import { useCompileStatus } from '@/composables/useCompileStatus';
 import type { VirtualFs } from '@/vfs';
 
 const props = withDefaults(
@@ -15,6 +16,8 @@ const props = withDefaults(
     vfs: VirtualFs;
     // display zoom: 1 = page rendered at its natural point size (A4 -> 595x842 CSS px)
     zoom?: number;
+    // compilation status, surfaced in the preview toolbar
+    compileStatus: ReturnType<typeof useCompileStatus>;
   }>(),
   { zoom: 1 },
 );
@@ -42,6 +45,7 @@ async function compile() {
     return;
   }
   loading.value = true;
+  props.compileStatus.startCompile();
   const cycleStart = performance.now();
   try {
     // push the latest text of every file into the compiler's shadow FS
@@ -67,6 +71,7 @@ async function compile() {
     // its own metric so report() shows end-to-end edit-to-pixels latency.
     const total = performance.now() - cycleStart;
     recordSample('total', total);
+    props.compileStatus.finishCompile(total);
     if (isLogging()) {
       console.debug(`[typst] compile cycle ${Math.round(total * 10) / 10}ms`);
     }
@@ -116,6 +121,7 @@ onBeforeUnmount(() => {
   unsubscribe();
   preview?.destroy();
   scheduler.dispose();
+  props.compileStatus.reset();
 });
 </script>
 
