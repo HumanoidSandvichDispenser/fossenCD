@@ -5,9 +5,7 @@ import { useRoute } from 'vue-router';
 import { useTeamtypeStore } from '@/stores/teamtype';
 import { useProjectsStore } from '@/stores/projects';
 import type { ProjectView } from '@/client/types.gen';
-import TeamtypeEditor from '@/components/TeamtypeEditor.vue';
-import TypstPreview from '@/components/TypstPreview.vue';
-import FileList from '@/components/FileList.vue';
+import EditorWorkspace from '@/components/EditorWorkspace.vue';
 import ShareProjectDialog from '@/components/ShareProjectDialog.vue';
 import LogsDialog from '@/components/LogsDialog.vue';
 
@@ -29,61 +27,6 @@ const connected = computed(
     teamtype.ready &&
     teamtype.peers.length > 0,
 );
-
-// Typst rendering only makes sense for .typ files; the preview tracks the
-// chosen build target
-const isTypst = computed(() => teamtype.previewFile?.toLowerCase().endsWith('.typ') ?? false);
-
-// editor pane width as a percentage of the whole workspace (the value the
-// editor pane's flex-basis resolves against)
-const splitPercent = ref(55);
-const workspace = ref<HTMLElement>();
-// smallest pixel width we let either the editor or the preview shrink to
-const MIN_PANE_PX = 160;
-// cached at drag start; the layout doesn't move while dragging, so we measure
-// the geometry once instead of on every pointermove. `paneLeft` is where the
-// editor pane begins (i.e. just past the sidebar), so the divider tracks the
-// cursor exactly rather than being offset by the sidebar width.
-let dragGeom: { paneLeft: number; workspaceWidth: number; paneAreaWidth: number } | null = null;
-
-function onDragMove(event: PointerEvent) {
-  if (!dragGeom) {
-    return;
-  }
-  const { paneLeft, workspaceWidth, paneAreaWidth } = dragGeom;
-  const min = Math.min(MIN_PANE_PX, paneAreaWidth / 2);
-  // editor width = cursor position relative to where the editor pane starts,
-  // clamped so the preview keeps at least `min` px
-  const editorWidth = Math.max(min, Math.min(paneAreaWidth - min, event.clientX - paneLeft));
-  splitPercent.value = (editorWidth / workspaceWidth) * 100;
-}
-
-function stopDrag() {
-  dragGeom = null;
-  document.body.style.cursor = '';
-  document.body.style.userSelect = '';
-  window.removeEventListener('pointermove', onDragMove);
-  window.removeEventListener('pointerup', stopDrag);
-}
-
-function startDrag() {
-  const pane = workspace.value?.querySelector('.editor-pane');
-  if (!workspace.value || !pane) {
-    return;
-  }
-  const ws = workspace.value.getBoundingClientRect();
-  const paneLeft = pane.getBoundingClientRect().left;
-  dragGeom = {
-    paneLeft,
-    workspaceWidth: ws.width,
-    // the editor + divider + preview region (everything past the sidebar)
-    paneAreaWidth: ws.right - paneLeft,
-  };
-  document.body.style.cursor = 'col-resize';
-  document.body.style.userSelect = 'none';
-  window.addEventListener('pointermove', onDragMove);
-  window.addEventListener('pointerup', stopDrag);
-}
 
 /**
  * Opens a project by ID, fetching its details and connecting to its teamtype
@@ -134,7 +77,6 @@ watch(
 );
 
 onBeforeUnmount(() => {
-  stopDrag();
   teamtype.reset();
 });
 </script>
@@ -194,37 +136,7 @@ onBeforeUnmount(() => {
     <ShareProjectDialog :open="sharing" :project="project" @close="sharing = false" />
     <LogsDialog :open="showLogs" :project="project" @close="showLogs = false" />
 
-    <div v-if="connected" ref="workspace" class="workspace" :style="{ '--editor-basis': `${splitPercent}%` }">
-      <FileList
-        :files="teamtype.files"
-        :current-file="teamtype.currentFile"
-        :preview-file="teamtype.previewFile"
-        @select="teamtype.selectFile($event)"
-        @preview="teamtype.setPreviewFile($event)"
-      />
-
-      <section class="editor-pane">
-        <TeamtypeEditor class="editor" />
-      </section>
-
-      <div class="divider" role="separator" aria-orientation="vertical" @pointerdown.prevent="startDrag">
-        <span class="grip" />
-      </div>
-
-      <section class="preview-pane">
-        <TypstPreview
-          v-if="isTypst && teamtype.previewFile"
-          :main-file="teamtype.previewFile"
-          :vfs="teamtype.vfs"
-        />
-        <div v-else class="preview-placeholder">
-          <span class="preview-title serif-lg">Preview</span>
-          <span class="preview-sub text-sm">
-            {{ teamtype.previewFile ? 'Preview is only available for .typ files.' : 'Select a file to preview.' }}
-          </span>
-        </div>
-      </section>
-    </div>
+    <EditorWorkspace v-if="connected" />
   </div>
 </template>
 
@@ -338,87 +250,5 @@ onBeforeUnmount(() => {
 .dot-pending {
   background: var(--color-warning);
   animation: pulse 1.4s var(--ease-in-out) infinite;
-}
-
-/* Workspace split */
-.workspace {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-}
-
-.editor-pane {
-  flex: 0 0 var(--editor-basis, 55%);
-  min-width: 0;
-  background: var(--color-bg-card);
-  overflow: hidden;
-}
-
-.editor {
-  height: 100%;
-}
-
-/* Resizable divider */
-.divider {
-  flex: none;
-  width: var(--border-thin);
-  position: relative;
-  background: var(--color-border);
-  cursor: col-resize;
-}
-
-.divider::before {
-  /* Widen the hit target without shifting layout. */
-  content: '';
-  position: absolute;
-  inset: 0 -4px;
-}
-
-.divider:hover,
-.divider:active {
-  background: var(--color-accent-400);
-}
-
-.grip {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 4px;
-  height: 28px;
-  transform: translate(-50%, -50%);
-  border-radius: var(--radius-full);
-  background: var(--color-neutral-300);
-}
-
-.divider:hover .grip {
-  background: var(--color-accent-400);
-}
-
-/* Preview pane */
-.preview-pane {
-  /* Fill whatever the sidebar, editor pane and divider leave behind. */
-  flex: 1 1 0;
-  min-width: 0;
-  overflow: auto;
-  background: var(--color-bg-page);
-}
-
-.preview-placeholder {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-1);
-  text-align: center;
-  padding: var(--space-8);
-}
-
-.preview-title {
-  color: var(--color-text-secondary);
-}
-
-.preview-sub {
-  color: var(--color-text-tertiary);
 }
 </style>
