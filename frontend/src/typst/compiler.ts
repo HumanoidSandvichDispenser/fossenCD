@@ -120,6 +120,24 @@ export function compileVector(mainFile: string): Promise<CompileOutput> {
   });
 }
 
+/**
+ * Compile `mainFile` to PDF bytes, resolving imports/includes against the files
+ * in the shadow FS. Rejects with a {@link TypstCompileError} (carrying the error
+ * diagnostics) if the source fails to compile.
+ */
+export async function compilePdf(mainFile: string): Promise<Uint8Array> {
+  const compiler = await $typst.getCompiler();
+  const out = await compiler.compile({
+    mainFilePath: vfsPath(mainFile),
+    format: CompileFormatEnum.pdf,
+    diagnostics: 'full',
+  });
+  if (out.result === undefined) {
+    throw new TypstCompileError(toTypstDiagnostics(out.diagnostics));
+  }
+  return out.result;
+}
+
 /** Upper bound on render resolution, to cap canvas backing-store memory at
  *  high zoom (a single A4 page at this density is ~32M px / ~128MB). */
 const MAX_PIXEL_PER_PT = 8;

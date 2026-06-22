@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { compilerPort, TypstCompileError } from '@/typst/compiler';
-import { dropSource, resetSources, syncSource } from '@/typst/shadow-fs';
+import { dropSource, resetSources, syncAll } from '@/typst/shadow-fs';
 import { CanvasPreview } from '@/typst/canvas-preview';
 import { isLogging, measure, recordSample } from '@/typst/perf';
 import { useCompileScheduler } from '@/composables/useCompileScheduler';
@@ -53,15 +53,7 @@ async function compile() {
   try {
     // push the latest text of every file into the compiler's shadow FS
     // (unchanged files are skipped internally) before rendering the target.
-    // Files registered without content yet are skipped.
-    await measure('sync', async () => {
-      for (const file of props.vfs.list()) {
-        const text = props.vfs.read(file);
-        if (text !== undefined) {
-          await syncSource(file, text);
-        }
-      }
-    });
+    await measure('sync', () => syncAll(props.vfs));
     // compile + cull + raster are measured inside the renderer as 'compile',
     // 'manip', 'raster' and 'rasterPage'. The compile also yields any warnings.
     const diagnostics = await preview.render(props.mainFile);

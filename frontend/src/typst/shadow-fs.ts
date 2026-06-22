@@ -4,6 +4,7 @@
 
 import { $typst } from '@myriaddreamin/typst.ts';
 import { configure, vfsPath } from './compiler';
+import type { VirtualFs } from '@/vfs';
 
 /**
  * Last synced content for each file. Used to avoid unnecessary re-syncs.
@@ -22,6 +23,19 @@ export async function syncSource(file: string, content: string): Promise<void> {
   }
   synced.set(path, content);
   await $typst.addSource(path, content);
+}
+
+/**
+ * Sync every file in `vfs` into the shadow FS. Files registered without content
+ * yet are skipped; unchanged files are no-ops (see {@link syncSource}).
+ */
+export async function syncAll(vfs: VirtualFs): Promise<void> {
+  for (const file of vfs.list()) {
+    const text = vfs.read(file);
+    if (text !== undefined) {
+      await syncSource(file, text);
+    }
+  }
 }
 
 /** Remove a file from the shadow FS. */

@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue';
+import { PhFilePdf } from '@phosphor-icons/vue';
 
 import { useTeamtypeStore } from '@/stores/teamtype';
 import { useZoom } from '@/composables/useZoom';
 import { useCompileStatus } from '@/composables/useCompileStatus';
 import { useDiagnostics } from '@/composables/useDiagnostics';
+import { useExportPdf } from '@/composables/useExportPdf';
 import TeamtypeEditor from '@/components/TeamtypeEditor.vue';
 import TypstPreview from '@/components/TypstPreview.vue';
 import FileList from '@/components/FileList.vue';
@@ -25,6 +27,7 @@ const split = ref<HTMLElement>();
 const zoomState = useZoom();
 const compileStatus = useCompileStatus();
 const diagnostics = useDiagnostics();
+const { exporting: pdfExporting, error: pdfError, exportPdf } = useExportPdf();
 
 // smallest pixel width we let either the editor or the preview shrink to
 const MIN_PANE_PX = 160;
@@ -105,6 +108,16 @@ onBeforeUnmount(stopDrag);
         <div class="toolbar-group">
           <!-- end -->
           <CompileStatus :status="compileStatus" />
+          <button
+            v-if="isTypst && teamtype.previewFile"
+            class="label-sm btn btn-sm btn-secondary"
+            :disabled="pdfExporting"
+            :title="pdfError ?? 'Export the preview as PDF'"
+            @click="teamtype.previewFile && exportPdf(teamtype.previewFile, teamtype.vfs)"
+          >
+            <PhFilePdf :size="14" />
+            {{ pdfExporting ? 'Exporting…' : 'Export PDF' }}
+          </button>
         </div>
       </div>
 
