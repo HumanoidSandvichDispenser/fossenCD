@@ -115,9 +115,42 @@ export class CanvasPreview {
       backgroundColor: BACKGROUND,
     });
     this.canvases = [...this.mount.querySelectorAll('canvas')];
+    this.snapToDevicePixels();
     this.dirty = pages.map(() => false);
     this.attachObserver();
     this.scroller.scrollTop = savedScrollTop;
+  }
+
+  /**
+   * Display each page's canvas at exactly one device pixel per backing pixel.
+   */
+  private snapToDevicePixels(): void {
+    const dpr = window.devicePixelRatio || 1;
+    let maxCssWidth = 0;
+
+    for (const canvas of this.canvases) {
+      const cssWidth = canvas.width / dpr;
+      const cssHeight = canvas.height / dpr;
+      maxCssWidth = Math.max(maxCssWidth, cssWidth);
+      canvas.style.width = `${cssWidth}px`;
+      canvas.style.height = `${cssHeight}px`;
+
+      const fitWrapper = canvas.parentElement;
+      if (fitWrapper instanceof HTMLElement) {
+        fitWrapper.style.transform = 'none';
+      }
+
+      // HACK
+      const page = canvas.closest<HTMLElement>('.typst-page');
+      if (page !== null) {
+        page.style.width = `${cssWidth}px`;
+        page.style.height = `${cssHeight}px`;
+      }
+    }
+
+    if (maxCssWidth > 0) {
+      this.wrap.style.width = `${maxCssWidth}px`;
+    }
   }
 
   /** Re-raster every currently-visible page that is still dirty. */
