@@ -18,9 +18,11 @@ import type { RemoteCursor } from '@/teamtype/collab';
 import { editorPresentation, languageForFile } from '@/teamtype/editor-theme';
 import { toEditorDiagnostics } from '@/teamtype/editor-diagnostics';
 import type { useDiagnostics } from '@/composables/useDiagnostics';
+import type { useEditorJump } from '@/composables/useEditorJump';
 
 const props = defineProps<{
   diagnostics: ReturnType<typeof useDiagnostics>;
+  jump: ReturnType<typeof useEditorJump>;
 }>();
 
 const teamtype = useTeamtypeStore();
@@ -189,6 +191,20 @@ watch(() => teamtype.currentFile, (file, prev) => {
 
 // re-render markers when a new compile reports diagnostics for the open file
 watch(() => props.diagnostics.diagnostics.value, pushDiagnostics);
+
+// scroll to a line when the outline (or any producer) requests a jump
+watch(() => props.jump.target.value, (jumpTarget) => {
+  if (!view || !jumpTarget) {
+    return;
+  }
+  const lineNumber = Math.min(Math.max(jumpTarget.line, 1), view.state.doc.lines);
+  const pos = view.state.doc.line(lineNumber).from;
+  view.dispatch({
+    selection: { anchor: pos },
+    effects: EditorView.scrollIntoView(pos, { y: 'start', yMargin: 8 }),
+  });
+  view.focus();
+});
 
 onBeforeUnmount(() => {
   for (const cleanup of cleanups) {

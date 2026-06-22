@@ -33,13 +33,10 @@ const emit = defineEmits<{
 
 <style scoped>
 .sidebar {
-  width: 13rem;
-  flex: none;
   display: flex;
   flex-direction: column;
+  min-height: 0;
   padding: var(--space-3) var(--space-2);
-  background: var(--color-bg-card);
-  border-right: var(--border-thin) solid var(--color-border);
   overflow: auto;
 }
 

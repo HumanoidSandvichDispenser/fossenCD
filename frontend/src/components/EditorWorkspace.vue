@@ -7,11 +7,15 @@ import { useZoom } from '@/composables/useZoom';
 import { useCompileStatus } from '@/composables/useCompileStatus';
 import { useDiagnostics } from '@/composables/useDiagnostics';
 import { useExportPdf } from '@/composables/useExportPdf';
+import { useEditorJump } from '@/composables/useEditorJump';
+import { useSplitDrag } from '@/composables/useSplitDrag';
+import { parseOutline } from '@/teamtype/outline';
 import TeamtypeEditor from '@/components/TeamtypeEditor.vue';
 import TypstPreview from '@/components/TypstPreview.vue';
 import FileList from '@/components/FileList.vue';
 import ZoomBar from './workspace/ZoomBar.vue';
 import CompileStatus from './workspace/CompileStatus.vue';
+import Outline from './workspace/Outline.vue';
 
 const teamtype = useTeamtypeStore();
 
@@ -19,70 +23,69 @@ const teamtype = useTeamtypeStore();
 // chosen build target
 const isTypst = computed(() => teamtype.previewFile?.toLowerCase().endsWith('.typ') ?? false);
 
-// editor pane width as a percentage of the whole workspace (the value the
-// editor column's grid track resolves against)
-const splitPercent = ref(55);
-const split = ref<HTMLElement>();
-
 const zoomState = useZoom();
 const compileStatus = useCompileStatus();
 const diagnostics = useDiagnostics();
+const jump = useEditorJump();
 const { exporting: pdfExporting, error: pdfError, exportPdf } = useExportPdf();
 
-// smallest pixel width we let either the editor or the preview shrink to
-const MIN_PANE_PX = 160;
-// cached at drag start; the layout doesn't move while dragging, so we measure
-// the geometry once instead of on every pointermove. The split grid (editor +
-// divider + preview) is what `--editor-basis` resolves against, so all geometry
-// is relative to it; the sidebar lives outside and doesn't enter the math.
-let dragGeom: { left: number; width: number } | null = null;
+// outline of the file being edited, derived from its source markup; recomputes
+// reactively as the file's content (in the VFS) or the selection changes
+const outline = computed(() => {
+  const file = teamtype.currentFile;
+  const text = file ? teamtype.read(file) : undefined;
+  return text ? parseOutline(text) : [];
+});
 
-function onDragMove(event: PointerEvent) {
-  if (!dragGeom) {
-    return;
+// editor pane width as a % of the split grid; files pane height as a % of the
+// left sidebar. Both resolve a grid track basis.
+const splitPercent = ref(55);
+const split = ref<HTMLElement>();
+const editorDrag = useSplitDrag('x', (percent) => (splitPercent.value = percent));
+
+const filesPercent = ref(55);
+const sidebar = ref<HTMLElement>();
+const filesDrag = useSplitDrag('y', (percent) => (filesPercent.value = percent), 80);
+
+function startEditorDrag() {
+  if (split.value) {
+    editorDrag.start(split.value);
   }
-  const { left, width } = dragGeom;
-  const min = Math.min(MIN_PANE_PX, width / 2);
-  // editor width = cursor position relative to the split's left edge, clamped
-  // so the preview keeps at least `min` px
-  const editorWidth = Math.max(min, Math.min(width - min, event.clientX - left));
-  splitPercent.value = (editorWidth / width) * 100;
 }
 
-function stopDrag() {
-  dragGeom = null;
-  document.body.style.cursor = '';
-  document.body.style.userSelect = '';
-  window.removeEventListener('pointermove', onDragMove);
-  window.removeEventListener('pointerup', stopDrag);
-}
-
-function startDrag() {
-  if (!split.value) {
-    return;
+function startFilesDrag() {
+  if (sidebar.value) {
+    filesDrag.start(sidebar.value);
   }
-  const rect = split.value.getBoundingClientRect();
-  dragGeom = { left: rect.left, width: rect.width };
-  document.body.style.cursor = 'col-resize';
-  document.body.style.userSelect = 'none';
-  window.addEventListener('pointermove', onDragMove);
-  window.addEventListener('pointerup', stopDrag);
 }
 
-// drop the window listeners (and reset the body cursor) if we unmount mid-drag
-onBeforeUnmount(stopDrag);
+onBeforeUnmount(() => {
+  editorDrag.stop();
+  filesDrag.stop();
+});
 </script>
 
 <template>
   <div class="workspace">
-    <FileList
-      class="filelist"
-      :files="teamtype.files"
-      :current-file="teamtype.currentFile"
-      :preview-file="teamtype.previewFile"
-      @select="teamtype.selectFile($event)"
-      @preview="teamtype.setPreviewFile($event)"
-    />
+    <div ref="sidebar" class="leftbar" :style="{ '--files-basis': `${filesPercent}%` }">
+      <FileList
+        class="leftbar-files"
+        :files="teamtype.files"
+        :current-file="teamtype.currentFile"
+        :preview-file="teamtype.previewFile"
+        @select="teamtype.selectFile($event)"
+        @preview="teamtype.setPreviewFile($event)"
+      />
+      <div
+        class="divider divider-h"
+        role="separator"
+        aria-orientation="horizontal"
+        @pointerdown.prevent="startFilesDrag"
+      >
+        <span class="grip grip-h" />
+      </div>
+      <Outline class="leftbar-outline" :headings="outline" @select="jump.jumpTo($event)" />
+    </div>
 
     <div ref="split" class="split" :style="{ '--editor-basis': `${splitPercent}%` }">
       <div class="toolbar toolbar-editor">
@@ -121,12 +124,12 @@ onBeforeUnmount(stopDrag);
         </div>
       </div>
 
-      <div class="divider" role="separator" aria-orientation="vertical" @pointerdown.prevent="startDrag">
+      <div class="divider" role="separator" aria-orientation="vertical" @pointerdown.prevent="startEditorDrag">
         <span class="grip" />
       </div>
 
       <section class="editor-pane">
-        <TeamtypeEditor class="editor" :diagnostics="diagnostics" />
+        <TeamtypeEditor class="editor" :diagnostics="diagnostics" :jump="jump" />
       </section>
 
       <section class="preview-pane">
@@ -162,8 +165,20 @@ onBeforeUnmount(stopDrag);
   min-height: 0;
 }
 
-.filelist {
+/* Left sidebar: files (top) and outline (bottom), vertically resizable. */
+.leftbar {
   flex: none;
+  width: 13rem;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: var(--files-basis, 55%) var(--border-thin) 1fr;
+  background: var(--color-bg-card);
+  border-right: var(--border-thin) solid var(--color-border);
+}
+
+.leftbar-files,
+.leftbar-outline {
+  min-height: 0;
 }
 
 .split {
@@ -201,22 +216,6 @@ onBeforeUnmount(stopDrag);
   display: flex;
   align-items: center;
   gap: var(--space-1);
-}
-
-.zoom-value {
-  min-width: 3.5em;
-  padding: var(--space-1) var(--space-2);
-  text-align: center;
-  color: var(--color-text-secondary);
-  background: none;
-  border: none;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-
-.zoom-value:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-text);
 }
 
 .editor-pane {
@@ -263,6 +262,20 @@ onBeforeUnmount(stopDrag);
 
 .divider:hover .grip {
   background: var(--color-accent-400);
+}
+
+.divider-h {
+  grid-area: auto;
+  cursor: row-resize;
+}
+
+.divider-h::before {
+  inset: -4px 0;
+}
+
+.grip-h {
+  width: 28px;
+  height: 4px;
 }
 
 /* Preview pane */
