@@ -10,11 +10,18 @@ import {
   lineNumbers,
 } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import { lintGutter, setDiagnostics } from '@codemirror/lint';
 
 import { useTeamtypeStore } from '@/stores/teamtype';
 import { collab, remoteEdit, setRemoteCursors, wireDeltaToChanges } from '@/teamtype/collab';
 import type { RemoteCursor } from '@/teamtype/collab';
 import { editorPresentation, languageForFile } from '@/teamtype/editor-theme';
+import { toEditorDiagnostics } from '@/teamtype/editor-diagnostics';
+import type { useDiagnostics } from '@/composables/useDiagnostics';
+
+const props = defineProps<{
+  diagnostics: ReturnType<typeof useDiagnostics>;
+}>();
 
 const teamtype = useTeamtypeStore();
 const host = ref<HTMLDivElement>();
@@ -40,6 +47,7 @@ function makeState(file: string | null, doc: string): EditorState {
       history(),
       drawSelection(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
+      lintGutter(),
       EditorView.lineWrapping,
       editorPresentation,
       languageForFile(file),
@@ -89,6 +97,18 @@ function pushCursors() {
   view.dispatch({ effects: setRemoteCursors.of(visible) });
 }
 
+// Replace the editor's inline markers with the current file's diagnostics.
+function pushDiagnostics() {
+  if (!view) {
+    return;
+  }
+  const file = teamtype.currentFile;
+  const mapped = file
+    ? toEditorDiagnostics(view.state.doc, props.diagnostics.diagnostics.value, file)
+    : [];
+  view.dispatch(setDiagnostics(view.state, mapped));
+}
+
 onMounted(() => {
   view = new EditorView({ state: makeState(teamtype.currentFile, ''), parent: host.value });
 
@@ -105,6 +125,7 @@ onMounted(() => {
       if (view.state.doc.toString() !== text) {
         showState(makeState(file, text));
         pushCursors();
+        pushDiagnostics();
       }
     }),
     teamtype.onEdit((file, delta) => {
@@ -149,6 +170,7 @@ watch(() => teamtype.currentFile, (file, prev) => {
     states.clear();
     showState(makeState(null, ''));
     pushCursors();
+    pushDiagnostics();
     return;
   }
 
@@ -162,7 +184,11 @@ watch(() => teamtype.currentFile, (file, prev) => {
   const cached = states.get(file);
   showState(cached && cached.doc.toString() === text ? cached : makeState(file, text));
   pushCursors();
+  pushDiagnostics();
 });
+
+// re-render markers when a new compile reports diagnostics for the open file
+watch(() => props.diagnostics.diagnostics.value, pushDiagnostics);
 
 onBeforeUnmount(() => {
   for (const cleanup of cleanups) {

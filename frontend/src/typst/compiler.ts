@@ -18,6 +18,7 @@ import type { RenderSession, TypstRenderer } from '@myriaddreamin/typst.ts';
 import compilerModule from '@myriaddreamin/typst-ts-web-compiler/pkg/typst_ts_web_compiler_bg.wasm?url';
 import rendererModule from '@myriaddreamin/typst-ts-renderer/pkg/typst_ts_renderer_bg.wasm?url';
 import { measure } from './perf';
+import { formatDiagnostic, toTypstDiagnostics, type TypstDiagnostic } from './diagnostics';
 
 let configured = false;
 
@@ -74,31 +75,48 @@ export function getSession(): Promise<{ renderer: TypstRenderer; session: Render
   return sessionPromise;
 }
 
-/** Join the compiler's structured diagnostics into a single message string. */
-function formatDiagnostics(diags: string[] | undefined): string {
-  if (diags === undefined || diags.length === 0) {
-    return 'Typst compilation failed';
+/**
+ * The artifact plus any diagnostics (warnings) the compiler emitted alongside
+ * it.
+ */
+export interface CompileOutput {
+  artifact: Uint8Array;
+  diagnostics: TypstDiagnostic[];
+}
+
+/**
+ * Thrown when compilation fails.
+ */
+export class TypstCompileError extends Error {
+  constructor(readonly diagnostics: TypstDiagnostic[]) {
+    super(
+      diagnostics.length === 0
+        ? 'Typst compilation failed'
+        : diagnostics.map(formatDiagnostic).join('\n'),
+    );
+    this.name = 'TypstCompileError';
   }
-  return diags.join('\n');
 }
 
 /**
  * Compile `mainFile` to a Typst vector-IR artifact, resolving imports/includes
- * against the files in the shadow FS. Rejects with the compiler's diagnostics if
+ * against the files in the shadow FS. Returns the artifact with any warnings;
+ * rejects with a {@link TypstCompileError} (carrying the error diagnostics) if
  * the source fails to compile.
  */
-export function compileVector(mainFile: string): Promise<Uint8Array> {
+export function compileVector(mainFile: string): Promise<CompileOutput> {
   return measure('compile', async () => {
     const compiler = await $typst.getCompiler();
     const out = await compiler.compile({
       mainFilePath: vfsPath(mainFile),
       format: CompileFormatEnum.vector,
-      diagnostics: 'unix',
+      diagnostics: 'full',
     });
+    const diagnostics = toTypstDiagnostics(out.diagnostics);
     if (out.result === undefined) {
-      throw new Error(formatDiagnostics(out.diagnostics));
+      throw new TypstCompileError(diagnostics);
     }
-    return out.result;
+    return { artifact: out.result, diagnostics };
   });
 }
 
@@ -123,7 +141,7 @@ export function pixelPerPt(zoom: number): number {
 
 /** The compile + render-session capability needed to rasterize a document. */
 export interface CompilerPort {
-  compile(mainFile: string): Promise<Uint8Array>;
+  compile(mainFile: string): Promise<CompileOutput>;
   getSession(): Promise<{ renderer: TypstRenderer; session: RenderSession }>;
   pixelPerPt(zoom: number): number;
 }

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { compilerPort } from '@/typst/compiler';
+import { compilerPort, TypstCompileError } from '@/typst/compiler';
 import { dropSource, resetSources, syncSource } from '@/typst/shadow-fs';
 import { CanvasPreview } from '@/typst/canvas-preview';
 import { isLogging, measure, recordSample } from '@/typst/perf';
 import { useCompileScheduler } from '@/composables/useCompileScheduler';
 import { useCompileStatus } from '@/composables/useCompileStatus';
+import { useDiagnostics } from '@/composables/useDiagnostics';
 import type { VirtualFs } from '@/vfs';
 
 const props = withDefaults(
@@ -18,6 +19,8 @@ const props = withDefaults(
     zoom?: number;
     // compilation status, surfaced in the preview toolbar
     compileStatus: ReturnType<typeof useCompileStatus>;
+    // compiler diagnostics, surfaced as inline markers in the editor
+    diagnostics: ReturnType<typeof useDiagnostics>;
   }>(),
   { zoom: 1 },
 );
@@ -60,11 +63,15 @@ async function compile() {
       }
     });
     // compile + cull + raster are measured inside the renderer as 'compile',
-    // 'manip', 'raster' and 'rasterPage'.
-    await preview.render(props.mainFile);
+    // 'manip', 'raster' and 'rasterPage'. The compile also yields any warnings.
+    const diagnostics = await preview.render(props.mainFile);
+    props.diagnostics.set(diagnostics);
     hasRendered.value = true;
     error.value = null;
   } catch (e) {
+    // A failed compile still carries structured diagnostics (the errors); other
+    // failures have none to show in the editor.
+    props.diagnostics.set(e instanceof TypstCompileError ? e.diagnostics : []);
     error.value = e instanceof Error ? e.message : String(e);
   } finally {
     // Record the whole cycle (sync + compile + raster, incl. any error path) as
@@ -122,6 +129,7 @@ onBeforeUnmount(() => {
   preview?.destroy();
   scheduler.dispose();
   props.compileStatus.reset();
+  props.diagnostics.clear();
 });
 </script>
 
@@ -176,10 +184,9 @@ onBeforeUnmount(() => {
 }
 
 .preview-error {
-  /* Pin to the top of the viewport, layered over the (still laid-out) preview
-     so the last good render stays visible behind it. */
   position: sticky;
   top: 0;
+  left: 0;
   z-index: 2;
   margin: 0;
   padding: var(--space-4);

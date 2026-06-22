@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, ref } from 'vue';
 import { useTeamtypeStore } from '@/stores/teamtype';
 import { useZoom } from '@/composables/useZoom';
 import { useCompileStatus } from '@/composables/useCompileStatus';
+import { useDiagnostics } from '@/composables/useDiagnostics';
 import TeamtypeEditor from '@/components/TeamtypeEditor.vue';
 import TypstPreview from '@/components/TypstPreview.vue';
 import FileList from '@/components/FileList.vue';
@@ -23,6 +24,7 @@ const split = ref<HTMLElement>();
 
 const zoomState = useZoom();
 const compileStatus = useCompileStatus();
+const diagnostics = useDiagnostics();
 
 // smallest pixel width we let either the editor or the preview shrink to
 const MIN_PANE_PX = 160;
@@ -111,7 +113,7 @@ onBeforeUnmount(stopDrag);
       </div>
 
       <section class="editor-pane">
-        <TeamtypeEditor class="editor" />
+        <TeamtypeEditor class="editor" :diagnostics="diagnostics" />
       </section>
 
       <section class="preview-pane">
@@ -122,6 +124,7 @@ onBeforeUnmount(stopDrag);
           :vfs="teamtype.vfs"
           :zoom="zoomState.zoom.value"
           :compile-status="compileStatus"
+          :diagnostics="diagnostics"
         />
         <div v-else class="preview-placeholder">
           <span class="preview-title serif-lg">Preview</span>

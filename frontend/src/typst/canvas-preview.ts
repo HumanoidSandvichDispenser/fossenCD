@@ -6,6 +6,7 @@
 
 import { measure } from './perf';
 import type { CompilerPort } from './compiler';
+import type { TypstDiagnostic } from './diagnostics';
 import type { RenderSession, TypstRenderer } from '@myriaddreamin/typst.ts';
 
 /** Stable identity of the page layout, to detect when a rebuild is required. */
@@ -55,18 +56,18 @@ export class CanvasPreview {
   }
 
   /**
-   * Compile `mainFile` and update the preview. Cheap when the layout and zoom
-   * are stable (re-rasters only visible pages); falls back to a full rebuild
-   * otherwise.
+   * Compile `mainFile` and update the preview, returning any diagnostics
+   * (warnings) the compile emitted. Cheap when the layout and zoom are stable
+   * (re-rasters only visible pages); falls back to a full rebuild otherwise.
    */
-  async render(mainFile: string): Promise<void> {
-    const artifact = await this.compiler.compile(mainFile);
+  async render(mainFile: string): Promise<TypstDiagnostic[]> {
+    const { artifact, diagnostics } = await this.compiler.compile(mainFile);
     if (this.destroyed) {
-      return;
+      return diagnostics;
     }
     const { renderer, session } = await this.compiler.getSession();
     if (this.destroyed) {
-      return;
+      return diagnostics;
     }
     await measure('raster', async () => {
       await measure('manip', () => {
@@ -87,6 +88,7 @@ export class CanvasPreview {
       this.dirty = pages.map(() => true);
       await this.rasterVisible();
     });
+    return diagnostics;
   }
 
   /** Full render of all pages at the current zoom into freshly built canvases. */
