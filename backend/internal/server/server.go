@@ -70,6 +70,8 @@ func httpError(err error) error {
 	switch {
 	case errors.Is(err, service.ErrUnauthorized), errors.Is(err, service.ErrInvalidCredentials):
 		return huma.Error401Unauthorized(err.Error())
+	case errors.Is(err, service.ErrBadRequest):
+		return huma.Error400BadRequest(err.Error())
 	case errors.Is(err, service.ErrConflict):
 		return huma.Error409Conflict(err.Error())
 	case errors.Is(err, service.ErrNotFound):

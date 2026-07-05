@@ -1,9 +1,7 @@
-package teamtype
+package okayeg
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -104,24 +102,25 @@ func TestStopUnknownIsNoop(t *testing.T) {
 	m.Stop("nope") // must not block or panic
 }
 
-// execRun must clear a leftover socket before launching, else `teamtype share`
-// prompts (y/N) on stdin we never connect and the supervisor crash-loops.
-func TestExecRunRemovesStaleSocket(t *testing.T) {
-	dir := t.TempDir()
-	m := NewHostManager(context.Background(), HostOptions{Bin: "true", DataDir: dir})
+// Args lays out `eg -C <dir> serve`, which is the whole of `eg serve`'s CLI:
+// no relay/wormhole/passphrase flags to forward.
+func TestArgsServesWithNoExtraFlags(t *testing.T) {
+	m := NewHostManager(context.Background(), HostOptions{DataDir: "/data"})
+	got := m.Args("abc")
+	want := []string{"-C", "/data/abc", "serve"}
+	if len(got) != len(want) {
+		t.Fatalf("args = %v, want %v", got, want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("args = %v, want %v", got, want)
+		}
+	}
+}
 
-	sock := m.socketPath("a")
-	if err := os.MkdirAll(filepath.Dir(sock), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(sock, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := m.execRun(context.Background(), "a"); err != nil {
-		t.Fatalf("execRun: %v", err)
-	}
-	if _, err := os.Stat(sock); !os.IsNotExist(err) {
-		t.Fatalf("stale socket not removed: %v", err)
+func TestDefaultBinIsEg(t *testing.T) {
+	m := NewHostManager(context.Background(), HostOptions{})
+	if m.opts.Bin != "eg" {
+		t.Fatalf("default bin = %q, want eg", m.opts.Bin)
 	}
 }

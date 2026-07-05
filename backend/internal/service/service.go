@@ -1,14 +1,13 @@
 package service
 
 import (
-	"context"
 	"time"
 
 	"github.com/spf13/afero"
 	"gorm.io/gorm"
 
+	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/okayeg"
 	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/store"
-	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/teamtype"
 )
 
 type Services struct {
@@ -20,10 +19,8 @@ type Options struct {
 	DB         *gorm.DB
 	FS         afero.Fs
 	DataDir    string
-	Relay      string
 	SessionTTL time.Duration
-	MintCtx    context.Context
-	Host       teamtype.Host
+	Host       okayeg.Host
 }
 
 func New(o Options) *Services {
@@ -37,8 +34,6 @@ func New(o Options) *Services {
 			users:    users,
 			fs:       o.FS,
 			dataDir:  o.DataDir,
-			relay:    o.Relay,
-			mintCtx:  o.MintCtx,
 			host:     o.Host,
 		},
 	}

@@ -3,51 +3,20 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"path/filepath"
-	"sync"
-	"time"
 
 	"github.com/spf13/afero"
 
+	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/okayeg"
 	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/store"
-	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/teamtype"
 )
-
-// joinCodeTTL is how long an unclaimed code lives; a repeat mint resets it.
-const joinCodeTTL = 2 * time.Minute
 
 type ProjectService struct {
 	projects *store.ProjectStore
 	users    *store.UserStore
 	fs       afero.Fs
 	dataDir  string
-	relay    string
-	mintCtx  context.Context
-	host     teamtype.Host
-
-	// live join codes keyed by user+project, guarded by the mutex
-	codes struct {
-		sync.Mutex
-		pending map[string]*pendingJoin
-	}
-}
-
-// pendingJoin is a live, unclaimed code. cancel closes the wormhole mailbox
-// (releasing the nameplate); timer fires cleanup on expiry.
-type pendingJoin struct {
-	code    string
-	address string
-	cancel  context.CancelFunc
-	timer   *time.Timer
-	expires time.Time
-}
-
-// extend resets the code's TTL and returns its new expiry. Call under the lock.
-func (pj *pendingJoin) extend() time.Time {
-	pj.timer.Reset(joinCodeTTL)
-	pj.expires = time.Now().Add(joinCodeTTL)
-	return pj.expires
+	host     okayeg.Host
 }
 
 func (s *ProjectService) Create(ctx context.Context, ownerID uint, name string) (store.Project, error) {
@@ -56,8 +25,10 @@ func (s *ProjectService) Create(ctx context.Context, ownerID uint, name string) 
 		return store.Project{}, err
 	}
 
-	// if the key can't be created, delete the project to avoid a broken state
-	if _, err := teamtype.EnsureKey(s.fs, s.shareDir(p.ID)); err != nil {
+	// if the key can't be created, delete the project to avoid a broken state.
+	// EnsureKey also makes the share dir a real eg repo (.eg/key), which is
+	// what `eg serve` needs to self-initialize on first connect.
+	if _, err := okayeg.EnsureKey(s.fs, s.shareDir(p.ID)); err != nil {
 		_ = s.projects.Delete(ctx, p.ID)
 		return store.Project{}, err
 	}
@@ -72,10 +43,12 @@ func (s *ProjectService) Get(ctx context.Context, userID uint, id string) (store
 	if err := s.access(ctx, userID, id); err != nil {
 		return store.Project{}, err
 	}
+
 	p, err := s.projects.Get(ctx, id)
 	if err != nil {
 		return store.Project{}, mapErr(err)
 	}
+
 	return *p, nil
 }
 
@@ -90,90 +63,77 @@ func (s *ProjectService) Delete(ctx context.Context, userID uint, id string) err
 	return s.fs.RemoveAll(s.shareDir(id))
 }
 
-func (s *ProjectService) Address(ctx context.Context, userID uint, id string) (string, error) {
+// Endpoint returns the host's EndpointId for the project: the public identity a
+// browser peer dials with `connect(endpointId)`. It is safe to show any member.
+// Ensures the eg daemon is up so the address is reachable.
+func (s *ProjectService) Endpoint(ctx context.Context, userID uint, id string) (string, error) {
 	key, err := s.loadKey(ctx, userID, id)
 	if err != nil {
 		return "", err
 	}
+
 	s.host.EnsureHost(id)
-	return key.SecretAddress(), nil
+	return key.EndpointID(), nil
 }
 
-// MintJoinCode returns a join code, the secret address it delivers, and when the
-// code expires. The code lives for joinCodeTTL; a repeat call from the same user
-// reuses and extends it. Delivery to a peer runs on the mint context.
-func (s *ProjectService) MintJoinCode(
-	ctx context.Context,
-	userID uint,
-	id string,
-) (code, address string, expiresAt time.Time, err error) {
-	key, err := s.loadKey(ctx, userID, id)
-	if err != nil {
-		return "", "", time.Time{}, err
+// RegisterPeer authorizes a browser's ed identity (its EndpointId) to sync the
+// project, recording it in .eg/trust (the enforcement eg re-reads on every
+// connect) and in the project_peer table (the queryable record). Requires
+// membership; tags the registering user on the trust line. Idempotent.
+func (s *ProjectService) RegisterPeer(ctx context.Context, userID uint, projectID, endpointID string) error {
+	if err := s.access(ctx, userID, projectID); err != nil {
+		return err
 	}
-	rkey := fmt.Sprintf("%d:%s", userID, id)
-
-	// reuse an outstanding code, extending its TTL
-	s.codes.Lock()
-	if pj, ok := s.codes.pending[rkey]; ok {
-		exp := pj.extend()
-		c, a := pj.code, pj.address
-		s.codes.Unlock()
-		return c, a, exp, nil
+	if !okayeg.ValidEndpointID(endpointID) {
+		return ErrBadRequest
 	}
-	s.codes.Unlock()
 
-	mintCtx, cancel := context.WithCancel(s.mintCtx)
-	code, done, err := key.MintJoinCode(mintCtx, s.relay)
-	if err != nil {
-		cancel()
-		return "", "", time.Time{}, err
+	if err := okayeg.SetTrust(s.fs, s.shareDir(projectID), endpointID, userID); err != nil {
+		return err
 	}
-	address = key.SecretAddress()
-
-	pj := &pendingJoin{
-		code:    code,
-		address: address,
-		cancel:  cancel,
-		expires: time.Now().Add(joinCodeTTL),
+	if err := s.projects.AddPeer(ctx, projectID, userID, endpointID); err != nil {
+		return mapErr(err)
 	}
-	pj.timer = time.AfterFunc(joinCodeTTL, func() {
-		s.dropCode(rkey, pj)
-	})
 
-	// a concurrent mint may have won; if so, discard ours and return theirs
-	s.codes.Lock()
-	if existing, ok := s.codes.pending[rkey]; ok {
-		exp := existing.extend()
-		s.codes.Unlock()
-		pj.timer.Stop()
-		cancel()
-		return existing.code, existing.address, exp, nil
-	}
-	if s.codes.pending == nil {
-		s.codes.pending = map[string]*pendingJoin{}
-	}
-	s.codes.pending[rkey] = pj
-	s.codes.Unlock()
-
-	// drop the code once claimed (or cancelled by expiry)
-	go func() {
-		<-done
-		s.dropCode(rkey, pj)
-	}()
-
-	return code, address, pj.expires, nil
+	s.host.EnsureHost(projectID)
+	return nil
 }
 
-// dropCode removes pj if it's still the active code for rkey and tears it down.
-func (s *ProjectService) dropCode(rkey string, pj *pendingJoin) {
-	s.codes.Lock()
-	if s.codes.pending[rkey] == pj {
-		delete(s.codes.pending, rkey)
+// UnregisterPeer revokes a browser's access: removes the trust line (takes
+// effect on the peer's next connect) and drops the project_peer row. The
+// project owner may remove any peer; a member may only remove their own.
+func (s *ProjectService) UnregisterPeer(ctx context.Context, userID uint, projectID, endpointID string) error {
+	peer, err := s.projects.GetPeer(ctx, projectID, endpointID)
+	if err != nil {
+		return mapErr(err)
 	}
-	s.codes.Unlock()
-	pj.timer.Stop()
-	pj.cancel()
+
+	// membership is the floor; owner or the registering user may proceed
+	isOwner, err := s.isOwner(ctx, userID, projectID)
+	if err != nil {
+		return err
+	}
+	if !isOwner && peer.UserID != userID {
+		return ErrUnauthorized
+	}
+
+	if err := okayeg.RemoveTrust(s.fs, s.shareDir(projectID), endpointID); err != nil {
+		return err
+	}
+	if err := s.projects.RemovePeer(ctx, projectID, endpointID); err != nil {
+		return mapErr(err)
+	}
+
+	return nil
+}
+
+// ListPeers returns the endpoints authorized on a project, with their
+// registering user. Any member may view them.
+func (s *ProjectService) ListPeers(ctx context.Context, userID uint, projectID string) ([]store.ProjectPeer, error) {
+	if err := s.access(ctx, userID, projectID); err != nil {
+		return nil, err
+	}
+	return s.projects.ListPeers(ctx, projectID)
 }
 
 // AddMember adds login (username or email) to the project as a member. Owner only.
@@ -188,12 +148,35 @@ func (s *ProjectService) AddMember(ctx context.Context, actorID uint, id, login 
 	return s.projects.AddMember(ctx, id, u.ID, store.RoleMember)
 }
 
-// RemoveMember removes a user from the project. Owner only.
+// RemoveMember removes a user from the project and revokes every browser they
+// registered, so a removed collaborator can't reconnect. Owner only.
 func (s *ProjectService) RemoveMember(ctx context.Context, actorID uint, id string, userID uint) error {
 	if err := s.requireOwner(ctx, actorID, id); err != nil {
 		return err
 	}
-	return mapErr(s.projects.RemoveMember(ctx, id, userID))
+
+	peers, err := s.projects.PeersForUser(ctx, id, userID)
+	if err != nil {
+		return mapErr(err)
+	}
+
+	// revoke trust before the member row, so a failure leaves the user still a
+	// member rather than a non-member who can still connect
+	for _, p := range peers {
+		if err := okayeg.RemoveTrust(s.fs, s.shareDir(id), p.EndpointID); err != nil {
+			return err
+		}
+	}
+
+	if err := s.projects.RemoveMember(ctx, id, userID); err != nil {
+		return mapErr(err)
+	}
+	if len(peers) > 0 {
+		// best-effort: the trust lines are already gone; the DB rows are clerical
+		_ = s.projects.RemovePeersByUser(ctx, id, userID)
+	}
+
+	return nil
 }
 
 func (s *ProjectService) ListMembers(ctx context.Context, userID uint, id string) ([]store.ProjectMember, error) {
@@ -228,17 +211,29 @@ func (s *ProjectService) requireOwner(ctx context.Context, userID uint, id strin
 	if err != nil {
 		return mapErr(err)
 	}
+
 	if m.Role != store.RoleOwner {
 		return ErrUnauthorized
 	}
+
 	return nil
 }
 
-func (s *ProjectService) loadKey(ctx context.Context, userID uint, id string) (teamtype.Key, error) {
-	if err := s.access(ctx, userID, id); err != nil {
-		return teamtype.Key{}, err
+// isOwner reports membership+ownership; missing membership is an error.
+func (s *ProjectService) isOwner(ctx context.Context, userID uint, id string) (bool, error) {
+	m, err := s.projects.GetMember(ctx, id, userID)
+	if err != nil {
+		return false, mapErr(err)
 	}
-	return teamtype.LoadKey(s.fs, s.shareDir(id))
+	return m.Role == store.RoleOwner, nil
+}
+
+func (s *ProjectService) loadKey(ctx context.Context, userID uint, id string) (okayeg.Key, error) {
+	if err := s.access(ctx, userID, id); err != nil {
+		return okayeg.Key{}, err
+	}
+
+	return okayeg.LoadKey(s.fs, s.shareDir(id))
 }
 
 func (s *ProjectService) shareDir(id string) string {

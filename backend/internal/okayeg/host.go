@@ -1,9 +1,8 @@
-package teamtype
+package okayeg
 
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
@@ -11,21 +10,18 @@ import (
 	"time"
 )
 
+// HostOptions configures a HostManager.
 type HostOptions struct {
-	Bin            string
-	DataDir        string
-	WormholeRelay  string
-	IrohRelay      string
-	IrohPkarr      string
-	IrohDNSDomain  string
+	Bin            string // eg binary (on PATH or absolute); defaults to "eg"
+	DataDir        string // base dir holding per-project share dirs
 	RestartBackoff time.Duration
 	StopGrace      time.Duration
 }
 
-// Host runs and supervises the teamtype peer daemon that hosts a project's
-// document, so web peers can reach it at the project's secret address. Call
-// EnsureHost when a peer needs the project (e.g. on address fetch); call Stop
-// before deleting its share dir.
+// Host runs and supervises the okayeg `eg serve` daemon that hosts a project's
+// document, so web peers can reach it at the project's endpoint id. Call
+// EnsureHost when a peer needs the project (e.g. on endpoint fetch or peer
+// registration); call Stop before deleting its share dir.
 type Host interface {
 	// EnsureHost starts a daemon hosting id's document if one isn't running.
 	EnsureHost(id string)
@@ -41,6 +37,8 @@ const maxLogBytes = 64 << 10
 
 var _ Host = (*HostManager)(nil)
 
+// HostManager supervises one `eg serve` process per project, restarting it if
+// it exits until Stop is called.
 type HostManager struct {
 	opts  HostOptions
 	base  context.Context
@@ -78,9 +76,11 @@ func (b *logBuffer) String() string {
 	return string(b.buf)
 }
 
+// NewHostManager builds a HostManager. The base context bounds every spawned
+// daemon's lifetime: cancelling it stops all hosts.
 func NewHostManager(base context.Context, opts HostOptions) *HostManager {
 	if opts.Bin == "" {
-		opts.Bin = "teamtype"
+		opts.Bin = "eg"
 	}
 	if opts.RestartBackoff == 0 {
 		opts.RestartBackoff = 2 * time.Second
@@ -165,12 +165,6 @@ func (m *HostManager) supervise(ctx context.Context, id string, h *hostProc) {
 }
 
 func (m *HostManager) execRun(ctx context.Context, id string) error {
-	// we're the sole launcher per share dir, so a leftover socket means a
-	// prior daemon was killed without cleanup; remove it otherwise `teamtype
-	// share` will prompt to continue (y/N) waiting for stdin, which we don't
-	// have causing the daemon to exit and loop restarting until the socket is
-	// removed
-	_ = os.Remove(m.socketPath(id))
 	cmd := exec.CommandContext(ctx, m.opts.Bin, m.args(id)...)
 	m.mu.Lock()
 	h := m.hosts[id]
@@ -179,37 +173,27 @@ func (m *HostManager) execRun(ctx context.Context, id string) error {
 		cmd.Stdout = h.log
 		cmd.Stderr = h.log
 	}
-	// the daemon only tears its network down on a signal, so stop gracefully
-	// with SIGTERM; SIGKILL after StopGrace if it hangs
+	// the daemon tears its network down on a signal, so stop gracefully with
+	// SIGTERM; SIGKILL after StopGrace if it hangs. eg serve has no control
+	// socket and no interactive prompt, so there's nothing to clean up first.
 	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
 	cmd.WaitDelay = m.opts.StopGrace
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("teamtype: start host %s: %w", id, err)
+		return fmt.Errorf("okayeg: start host %s: %w", id, err)
 	}
 	return cmd.Wait()
 }
 
-// args builds the share argv. No --init (that resets history); share self-inits
-// a doc when the share dir has none.
+// args builds the `eg serve` argv. -C points eg at the project's share dir,
+// which EnsureKey already seeded with .eg/key; `serve` self-initializes an
+// empty doc when the dir has none.
 func (m *HostManager) args(id string) []string {
-	a := []string{"--directory", m.shareDir(id), "share", "--no-join-code"}
-	for flag, val := range map[string]string{
-		"--magic-wormhole-relay": m.opts.WormholeRelay,
-		"--iroh-relay":           m.opts.IrohRelay,
-		"--iroh-pkarr-relay":     m.opts.IrohPkarr,
-		"--iroh-dns-domain":      m.opts.IrohDNSDomain,
-	} {
-		if val != "" {
-			a = append(a, flag, val)
-		}
-	}
-	return a
+	return []string{"-C", m.shareDir(id), "serve"}
 }
 
 func (m *HostManager) shareDir(id string) string {
 	return filepath.Join(m.opts.DataDir, id)
 }
 
-func (m *HostManager) socketPath(id string) string {
-	return filepath.Join(m.shareDir(id), ".teamtype", "socket")
-}
+// Args exposes the `eg serve` argv for tests so they don't have to run the daemon.
+func (m *HostManager) Args(id string) []string { return m.args(id) }

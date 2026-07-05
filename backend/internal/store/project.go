@@ -7,7 +7,7 @@ import (
 )
 
 // Project maps an owner to an on-disk share dir. ID is a random hex string so
-// share dirs aren't enumerable; the teamtype key lives at <dataDir>/<ID>/.teamtype/key.
+// share dirs aren't enumerable; the okayeg key lives at <dataDir>/<ID>/.eg/key.
 type Project struct {
 	ID        string `gorm:"primaryKey"`
 	Name      string `gorm:"not null"`

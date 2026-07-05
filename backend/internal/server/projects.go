@@ -28,7 +28,7 @@ func (s *Server) registerProjects(api huma.API) {
 
 	huma.Register(api, huma.Operation{
 		OperationID: "create-project", Method: http.MethodPost, Path: "/projects",
-		Summary: "Create a project and its teamtype key",
+		Summary: "Create a project and its okayeg key",
 	}, s.handleCreateProject)
 
 	huma.Register(api, huma.Operation{
@@ -42,14 +42,25 @@ func (s *Server) registerProjects(api huma.API) {
 	}, s.handleDeleteProject)
 
 	huma.Register(api, huma.Operation{
-		OperationID: "project-address", Method: http.MethodGet, Path: "/projects/{id}/address",
-		Summary: "Get the secret address for web/wasm peers",
-	}, s.handleProjectAddress)
+		OperationID: "project-endpoint", Method: http.MethodGet, Path: "/projects/{id}/endpoint",
+		Summary: "Get the host endpoint id for browser/wasm peers to dial",
+	}, s.handleProjectEndpoint)
 
 	huma.Register(api, huma.Operation{
-		OperationID: "project-join-code", Method: http.MethodPost, Path: "/projects/{id}/join-code",
-		Summary: "Mint a wormhole join code for terminal peers",
-	}, s.handleJoinCode)
+		OperationID: "list-peers", Method: http.MethodGet, Path: "/projects/{id}/peers",
+		Summary: "List the browser endpoints authorized to sync this project",
+	}, s.handleListPeers)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "register-peer", Method: http.MethodPost, Path: "/projects/{id}/peers",
+		Summary: "Authorize a browser endpoint (its ed identity) to sync the project",
+		DefaultStatus: http.StatusCreated,
+	}, s.handleRegisterPeer)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "unregister-peer", Method: http.MethodDelete, Path: "/projects/{id}/peers/{endpointId}",
+		Summary: "Revoke a browser endpoint's access", DefaultStatus: http.StatusNoContent,
+	}, s.handleUnregisterPeer)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "list-members", Method: http.MethodGet, Path: "/projects/{id}/members",
@@ -63,12 +74,12 @@ func (s *Server) registerProjects(api huma.API) {
 
 	huma.Register(api, huma.Operation{
 		OperationID: "remove-member", Method: http.MethodDelete, Path: "/projects/{id}/members/{userId}",
-		Summary: "Remove a collaborator (owner only)", DefaultStatus: http.StatusNoContent,
+		Summary: "Remove a collaborator and revoke their peers (owner only)", DefaultStatus: http.StatusNoContent,
 	}, s.handleRemoveMember)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "project-logs", Method: http.MethodGet, Path: "/projects/{id}/logs",
-		Summary: "View recent stdout/stderr of the project's teamtype daemon",
+		Summary: "View recent stdout/stderr of the project's eg daemon",
 	}, s.handleProjectLogs)
 }
 
@@ -137,43 +148,84 @@ func (s *Server) handleDeleteProject(ctx context.Context, in *idInput) (*struct{
 	return nil, nil
 }
 
-type addressBody struct {
-	Address string `json:"address"`
+type endpointBody struct {
+	EndpointID string `json:"endpointId"`
 }
 
-type addressOutput struct{ Body addressBody }
+type endpointOutput struct{ Body endpointBody }
 
-func (s *Server) handleProjectAddress(ctx context.Context, in *idInput) (*addressOutput, error) {
+func (s *Server) handleProjectEndpoint(ctx context.Context, in *idInput) (*endpointOutput, error) {
 	uid, err := requireUser(ctx)
 	if err != nil {
 		return nil, err
 	}
-	addr, err := s.svc.Projects.Address(ctx, uid, in.ID)
+	endpoint, err := s.svc.Projects.Endpoint(ctx, uid, in.ID)
 	if err != nil {
 		return nil, httpError(err)
 	}
-	return &addressOutput{Body: addressBody{Address: addr}}, nil
+	return &endpointOutput{Body: endpointBody{EndpointID: endpoint}}, nil
 }
 
-type joinCodeBody struct {
-	Code      string    `json:"code"`
-	Address   string    `json:"address"`
-	ExpiresAt time.Time `json:"expires_at"`
+type peerView struct {
+	EndpointID string `json:"endpoint_id"`
+	UserID     uint   `json:"user_id"`
+	Username   string `json:"username"`
 }
 
-type joinCodeOutput struct{ Body joinCodeBody }
+type peersOutput struct{ Body []peerView }
 
-func (s *Server) handleJoinCode(ctx context.Context, in *idInput) (*joinCodeOutput, error) {
+func (s *Server) handleListPeers(ctx context.Context, in *idInput) (*peersOutput, error) {
 	uid, err := requireUser(ctx)
 	if err != nil {
 		return nil, err
 	}
-	code, addr, expiresAt, err := s.svc.Projects.MintJoinCode(ctx, uid, in.ID)
+	peers, err := s.svc.Projects.ListPeers(ctx, uid, in.ID)
 	if err != nil {
 		return nil, httpError(err)
 	}
-	body := joinCodeBody{Code: code, Address: addr, ExpiresAt: expiresAt}
-	return &joinCodeOutput{Body: body}, nil
+	out := &peersOutput{Body: make([]peerView, 0, len(peers))}
+	for _, p := range peers {
+		out.Body = append(out.Body, peerView{
+			EndpointID: p.EndpointID,
+			UserID:     p.UserID,
+			Username:   p.User.Username,
+		})
+	}
+	return out, nil
+}
+
+type registerPeerInput struct {
+	ID   string `path:"id"`
+	Body struct {
+		EndpointID string `json:"endpointId" minLength:"1"`
+	}
+}
+
+func (s *Server) handleRegisterPeer(ctx context.Context, in *registerPeerInput) (*struct{}, error) {
+	uid, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.svc.Projects.RegisterPeer(ctx, uid, in.ID, in.Body.EndpointID); err != nil {
+		return nil, httpError(err)
+	}
+	return nil, nil
+}
+
+type unregisterPeerInput struct {
+	ID         string `path:"id"`
+	EndpointID string `path:"endpointId"`
+}
+
+func (s *Server) handleUnregisterPeer(ctx context.Context, in *unregisterPeerInput) (*struct{}, error) {
+	uid, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.svc.Projects.UnregisterPeer(ctx, uid, in.ID, in.EndpointID); err != nil {
+		return nil, httpError(err)
+	}
+	return nil, nil
 }
 
 type memberView struct {

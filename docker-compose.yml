@@ -2,14 +2,22 @@ services:
   backend:
     container_name: fossencd-backend
     build:
-      context: backend
-      dockerfile: Dockerfile
+      # context is the backend module; the eg binary is either built from
+      # the okayeg git remote (EG_SOURCE=git, default) or bind-mounted from the
+      # host at runtime (EG_SOURCE=local, via EG_BIN_HOST). See backend/Dockerfile.
+      context: ./backend
+      args:
+        EG_SOURCE: ${FOSSENCD_EG_SOURCE:-git}
+        OKAYEG_REV: ${OKAYEG_REV:-1da42e41857d0baee7a3c1acf7822deaaf91f195}
     image: fossencd-backend
     volumes:
       - ./backend:/app
       - /app/tmp
       - go_mod_cache:/go/pkg/mod
       - ./data:/data
+      # only active with EG_SOURCE=local: bind a prebuilt eg over the image's
+      # copy so rebuilding okayeg on the host is a single `cargo build` away.
+      - ${FOSSENCD_EG_BIN_HOST:-/dev/null}:/usr/local/bin/eg
     environment:
       - FOSSENCD_DB=/data/fossencd.db
       - FOSSENCD_DATA_DIR=/data/share

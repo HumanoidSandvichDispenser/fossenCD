@@ -7,4 +7,5 @@ var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrConflict           = errors.New("already exists")
 	ErrNotFound           = errors.New("not found")
+	ErrBadRequest         = errors.New("bad request")
 )

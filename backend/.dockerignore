@@ -1,0 +1,3 @@
+# runtime artifacts; the image builds from source, never needs these
+tmp
+data

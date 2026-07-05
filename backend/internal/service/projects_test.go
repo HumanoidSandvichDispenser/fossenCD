@@ -3,11 +3,22 @@ package service
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"regexp"
 	"testing"
 
 	"github.com/spf13/afero"
+
+	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/okayeg"
 )
+
+const (
+	endpointAlice = "01bc8405c2648427256e61fc6e3e52236635f87460eeb44076ccb361c601c74b"
+	endpointBob   = "02bc8405c2648427256e61fc6e3e52236635f87460eeb44076ccb361c601c74b"
+	endpointCarol = "03bc8405c2648427256e61fc6e3e52236635f87460eeb44076ccb361c601c74b"
+)
+
+var hexID = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 func ownerID(t *testing.T, svc *Services, name string) uint {
 	t.Helper()
@@ -30,33 +41,46 @@ func TestCreateProjectWritesKey(t *testing.T) {
 	if p.ID == "" {
 		t.Fatal("expected generated project id")
 	}
-	keyPath := svc.Projects.shareDir(p.ID) + "/.teamtype/key"
+	keyPath := filepath.Join(svc.Projects.shareDir(p.ID), ".eg", "key")
 	info, err := svc.Projects.fs.Stat(keyPath)
 	if err != nil {
 		t.Fatalf("stat key: %v", err)
 	}
-	if info.Size() != 64 {
-		t.Fatalf("keyfile is %d bytes, want 64", info.Size())
+	if info.Size() != 32 {
+		t.Fatalf("keyfile is %d bytes, want 32 (.eg/key seed)", info.Size())
 	}
 }
 
-func TestAddressFormatAndStability(t *testing.T) {
+func TestEndpointFormatAndStability(t *testing.T) {
 	svc := newServices(t)
 	ctx := context.Background()
 	uid := ownerID(t, svc, "ryan")
 	p, _ := svc.Projects.Create(ctx, uid, "thesis")
 
-	addr, err := svc.Projects.Address(ctx, uid, p.ID)
+	endpoint, err := svc.Projects.Endpoint(ctx, uid, p.ID)
 	if err != nil {
-		t.Fatalf("address: %v", err)
+		t.Fatalf("endpoint: %v", err)
 	}
-	if !regexp.MustCompile(`^[0-9a-f]{64}#[0-9a-f]{64}$`).MatchString(addr) {
-		t.Fatalf("address %q not node_id#passphrase hex", addr)
+	if !hexID.MatchString(endpoint) {
+		t.Fatalf("endpoint %q not 64 lowercase hex chars", endpoint)
 	}
 
-	again, _ := svc.Projects.Address(ctx, uid, p.ID)
-	if again != addr {
-		t.Fatalf("address not stable: %q vs %q", addr, again)
+	again, _ := svc.Projects.Endpoint(ctx, uid, p.ID)
+	if again != endpoint {
+		t.Fatalf("endpoint not stable: %q vs %q", endpoint, again)
+	}
+}
+
+func TestEndpointEnsuresHost(t *testing.T) {
+	svc := newServices(t)
+	ctx := context.Background()
+	uid := ownerID(t, svc, "ryan")
+	p, _ := svc.Projects.Create(ctx, uid, "thesis")
+
+	_, _ = svc.Projects.Endpoint(ctx, uid, p.ID)
+	host := svc.Projects.host.(*noopHost)
+	if host.ensured[p.ID] == 0 {
+		t.Fatal("Endpoint did not ensure the host daemon")
 	}
 }
 
@@ -127,5 +151,153 @@ func TestDeleteOtherUsersProject(t *testing.T) {
 
 	if err := svc.Projects.Delete(ctx, b, p.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("want ErrNotFound deleting another's project, got %v", err)
+	}
+}
+
+func TestRegisterPeerWritesTrustAndDB(t *testing.T) {
+	svc := newServices(t)
+	ctx := context.Background()
+	a := ownerID(t, svc, "alice")
+	p, _ := svc.Projects.Create(ctx, a, "doc")
+
+	if err := svc.Projects.RegisterPeer(ctx, a, p.ID, endpointAlice); err != nil {
+		t.Fatalf("RegisterPeer: %v", err)
+	}
+
+	// trust file has the line
+	grant, err := okayeg.ListTrust(svc.Projects.fs, svc.Projects.shareDir(p.ID))
+	if err != nil {
+		t.Fatalf("ListTrust: %v", err)
+	}
+	if len(grant) != 1 || grant[0].EndpointID != endpointAlice || grant[0].UserID != a {
+		t.Fatalf("trust grant = %+v, want alice user %d", grant, a)
+	}
+
+	// DB has the row
+	peers, err := svc.Projects.ListPeers(ctx, a, p.ID)
+	if err != nil {
+		t.Fatalf("ListPeers: %v", err)
+	}
+	if len(peers) != 1 || peers[0].EndpointID != endpointAlice {
+		t.Fatalf("peers = %+v, want endpointAlice", peers)
+	}
+}
+
+func TestRegisterPeerRejectsNonMember(t *testing.T) {
+	svc := newServices(t)
+	ctx := context.Background()
+	a := ownerID(t, svc, "alice")
+	ownerID(t, svc, "bob") // registered but not on the project
+	p, _ := svc.Projects.Create(ctx, a, "doc")
+
+	if err := svc.Projects.RegisterPeer(ctx, 999, p.ID, endpointBob); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+	// a non-member user id doesn't exist either; cover the access path
+}
+
+func TestRegisterPeerRejectsBadEndpointID(t *testing.T) {
+	svc := newServices(t)
+	ctx := context.Background()
+	a := ownerID(t, svc, "alice")
+	p, _ := svc.Projects.Create(ctx, a, "doc")
+
+	if err := svc.Projects.RegisterPeer(ctx, a, p.ID, "nothex"); !errors.Is(err, ErrBadRequest) {
+		t.Fatalf("want ErrBadRequest, got %v", err)
+	}
+}
+
+func TestRegisterPeerIsIdempotent(t *testing.T) {
+	svc := newServices(t)
+	ctx := context.Background()
+	a := ownerID(t, svc, "alice")
+	p, _ := svc.Projects.Create(ctx, a, "doc")
+
+	for i := 0; i < 3; i++ {
+		if err := svc.Projects.RegisterPeer(ctx, a, p.ID, endpointAlice); err != nil {
+			t.Fatalf("RegisterPeer %d: %v", i, err)
+		}
+	}
+	peers, _ := svc.Projects.ListPeers(ctx, a, p.ID)
+	if len(peers) != 1 {
+		t.Fatalf("expected 1 peer, got %d", len(peers))
+	}
+	grant, _ := okayeg.ListTrust(svc.Projects.fs, svc.Projects.shareDir(p.ID))
+	if len(grant) != 1 {
+		t.Fatalf("expected 1 trust row, got %d", len(grant))
+	}
+}
+
+func TestUnregisterPeerOwnerCanRemoveAny(t *testing.T) {
+	svc := newServices(t)
+	ctx := context.Background()
+	a := ownerID(t, svc, "alice")
+	b := ownerID(t, svc, "bob")
+	p, _ := svc.Projects.Create(ctx, a, "doc")
+	if err := svc.Projects.AddMember(ctx, a, p.ID, "bob"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Projects.RegisterPeer(ctx, b, p.ID, endpointBob); err != nil {
+		t.Fatalf("bob register: %v", err)
+	}
+
+	if err := svc.Projects.UnregisterPeer(ctx, a, p.ID, endpointBob); err != nil {
+		t.Fatalf("owner unregister: %v", err)
+	}
+	peers, _ := svc.Projects.ListPeers(ctx, a, p.ID)
+	if len(peers) != 0 {
+		t.Fatalf("expected 0 peers, got %d", len(peers))
+	}
+	grant, _ := okayeg.ListTrust(svc.Projects.fs, svc.Projects.shareDir(p.ID))
+	if len(grant) != 0 {
+		t.Fatalf("expected 0 trust rows, got %d", len(grant))
+	}
+}
+
+func TestUnregisterPeerMemberCanRemoveOwn(t *testing.T) {
+	svc := newServices(t)
+	ctx := context.Background()
+	a := ownerID(t, svc, "alice")
+	b := ownerID(t, svc, "bob")
+	p, _ := svc.Projects.Create(ctx, a, "doc")
+	if err := svc.Projects.AddMember(ctx, a, p.ID, "bob"); err != nil {
+		t.Fatal(err)
+	}
+	_ = svc.Projects.RegisterPeer(ctx, b, p.ID, endpointBob)
+	_ = svc.Projects.RegisterPeer(ctx, a, p.ID, endpointAlice)
+
+	// bob can drop his own endpoint, but not alice's
+	if err := svc.Projects.UnregisterPeer(ctx, b, p.ID, endpointBob); err != nil {
+		t.Fatalf("remove own: %v", err)
+	}
+	if err := svc.Projects.UnregisterPeer(ctx, b, p.ID, endpointAlice); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("remove other's: want ErrUnauthorized, got %v", err)
+	}
+}
+
+func TestRemoveMemberRevokesPeers(t *testing.T) {
+	svc := newServices(t)
+	ctx := context.Background()
+	a := ownerID(t, svc, "alice")
+	b := ownerID(t, svc, "bob")
+	p, _ := svc.Projects.Create(ctx, a, "doc")
+	if err := svc.Projects.AddMember(ctx, a, p.ID, "bob"); err != nil {
+		t.Fatal(err)
+	}
+	_ = svc.Projects.RegisterPeer(ctx, b, p.ID, endpointBob)
+	_ = svc.Projects.RegisterPeer(ctx, b, p.ID, endpointCarol)
+
+	if err := svc.Projects.RemoveMember(ctx, a, p.ID, b); err != nil {
+		t.Fatalf("RemoveMember: %v", err)
+	}
+	grant, _ := okayeg.ListTrust(svc.Projects.fs, svc.Projects.shareDir(p.ID))
+	for _, g := range grant {
+		if g.UserID == b {
+			t.Fatalf("bob's trust line survived removal: %+v", g)
+		}
+	}
+	peers, _ := svc.Projects.ListPeers(ctx, a, p.ID)
+	if len(peers) != 0 {
+		t.Fatalf("bob's peer rows survived removal: %+v", peers)
 	}
 }

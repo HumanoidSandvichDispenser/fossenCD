@@ -1,7 +1,6 @@
 package service
 
 import (
-	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -9,6 +8,7 @@ import (
 	"github.com/spf13/afero"
 	"gorm.io/driver/sqlite"
 
+	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/okayeg"
 	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/store"
 )
 
@@ -31,13 +31,24 @@ func newServices(t *testing.T) *Services {
 		FS:         afero.NewMemMapFs(),
 		DataDir:    "data",
 		SessionTTL: time.Hour,
-		MintCtx:    context.Background(),
-		Host:       noopHost{},
+		Host:       &noopHost{},
 	})
 }
 
-type noopHost struct{}
+// noopHost is an okayeg.Host that records EnsureHost calls without spawning
+// anything, so service tests stay hermetic.
+type noopHost struct {
+	ensured map[string]int
+}
 
-func (noopHost) EnsureHost(string)          {}
-func (noopHost) Stop(string)                {}
-func (noopHost) Logs(string) (string, bool) { return "", false }
+func (h *noopHost) EnsureHost(id string) {
+	if h.ensured == nil {
+		h.ensured = map[string]int{}
+	}
+	h.ensured[id]++
+}
+
+func (h *noopHost) Stop(string)                {}
+func (h *noopHost) Logs(string) (string, bool) { return "", false }
+
+var _ okayeg.Host = (*noopHost)(nil)

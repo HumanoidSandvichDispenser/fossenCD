@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-type ProjectStore struct{
+type ProjectStore struct {
 	db *gorm.DB
 }
 

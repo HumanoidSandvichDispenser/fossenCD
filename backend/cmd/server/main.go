@@ -12,10 +12,10 @@ import (
 	"gorm.io/driver/sqlite"
 
 	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/config"
+	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/okayeg"
 	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/server"
 	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/service"
 	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/store"
-	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/teamtype"
 )
 
 func main() {
@@ -29,22 +29,16 @@ func main() {
 		log.Fatalf("open db: %v", err)
 	}
 
-	host := teamtype.NewHostManager(ctx, teamtype.HostOptions{
-		Bin:           cfg.TeamtypeBin,
-		DataDir:       cfg.DataDir,
-		WormholeRelay: cfg.Relay,
-		IrohRelay:     cfg.IrohRelay,
-		IrohPkarr:     cfg.IrohPkarr,
-		IrohDNSDomain: cfg.IrohDNSDomain,
+	host := okayeg.NewHostManager(ctx, okayeg.HostOptions{
+		Bin:     cfg.EgBin,
+		DataDir: cfg.DataDir,
 	})
 
 	svc := service.New(service.Options{
 		DB:         db,
 		FS:         afero.NewOsFs(),
 		DataDir:    cfg.DataDir,
-		Relay:      cfg.Relay,
 		SessionTTL: 7 * 24 * time.Hour,
-		MintCtx:    ctx,
 		Host:       host,
 	})
 
