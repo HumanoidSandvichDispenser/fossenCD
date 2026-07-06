@@ -13,7 +13,7 @@ const emit = defineEmits<{
 }>();
 
 const tree = computed(() => nestOutline(props.headings));
-const getKey = (node: OutlineNode) => String(node.line);
+const getKey = (node: OutlineHeading) => String(node.line);
 const getChildren = (node: OutlineNode) => (node.children.length > 0 ? node.children : undefined);
 
 const expanded = ref<string[]>([]);

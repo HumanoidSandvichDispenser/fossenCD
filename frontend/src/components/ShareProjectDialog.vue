@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 import { useProjectsStore } from '@/stores/projects';
 import { useAuthStore } from '@/stores/auth';
-import type { JoinCodeBody, MemberView, ProjectView } from '@/client/types.gen';
+import type { MemberView, ProjectView } from '@/client/types.gen';
 import BaseDialog from './BaseDialog.vue';
 
 const props = defineProps<{ open: boolean; project: ProjectView | null }>();
@@ -19,43 +19,6 @@ const loading = ref(false);
 const adding = ref(false);
 const removing = ref<number | null>(null);
 
-const invite = ref<JoinCodeBody | null>(null);
-const minting = ref(false);
-const copied = ref(false);
-const now = ref(Date.now());
-let ticker: ReturnType<typeof setInterval> | null = null;
-let copyTimer: ReturnType<typeof setTimeout> | null = null;
-
-// Time left on the active code as m:ss, counting down once per second.
-const countdown = computed(() => {
-  const left = invite.value
-    ? Math.max(0, new Date(invite.value.expires_at).getTime() - now.value)
-    : 0;
-  const secs = Math.ceil(left / 1000);
-  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
-});
-
-function stopTicker() {
-  if (ticker) {
-    clearInterval(ticker);
-    ticker = null;
-  }
-}
-
-// Tick the countdown and drop the code once it expires server-side.
-function startTicker() {
-  stopTicker();
-  ticker = setInterval(() => {
-    now.value = Date.now();
-    if (invite.value && new Date(invite.value.expires_at).getTime() <= now.value) {
-      invite.value = null;
-      stopTicker();
-    }
-  }, 1000);
-}
-
-onUnmounted(stopTicker);
-
 // Whether the current user owns this project, gating the add/remove controls.
 const isOwner = computed(
   () => members.value.find((m) => m.user_id === auth.user?.id)?.role === 'owner',
@@ -65,9 +28,6 @@ const isOwner = computed(
 watch(
   () => props.open,
   async (open) => {
-    invite.value = null;
-    copied.value = false;
-    stopTicker();
     if (!open || !props.project) {
       return;
     }
@@ -100,35 +60,6 @@ async function add() {
   } finally {
     adding.value = false;
   }
-}
-
-async function generate() {
-  if (!props.project) {
-    return;
-  }
-  error.value = null;
-  minting.value = true;
-  try {
-    invite.value = await projects.joinCode(props.project.id);
-    now.value = Date.now();
-    startTicker();
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Could not mint join code';
-  } finally {
-    minting.value = false;
-  }
-}
-
-async function copy() {
-  if (!invite.value) {
-    return;
-  }
-  await navigator.clipboard.writeText(invite.value.code);
-  copied.value = true;
-  if (copyTimer) {
-    clearTimeout(copyTimer);
-  }
-  copyTimer = setTimeout(() => (copied.value = false), 1500);
 }
 
 async function remove(member: MemberView) {
@@ -185,29 +116,12 @@ async function remove(member: MemberView) {
     <div class="invite">
       <p class="invite-label label-sm">Edit locally</p>
       <p class="hint text-xs">
-        Open this project in your own editor with the teamtype CLI. Share the
-        code to let a collaborator join the same way.
+        Joining a project from a terminal with a one-shot code isn't available
+        with okayeg yet. Browser collaborators connect as soon as they open the
+        project, authorized by their own ed identity.
       </p>
-      <template v-if="invite">
-        <div class="code-row">
-          <code class="code">{{ invite.code }}</code>
-          <button type="button" class="label-sm btn btn-secondary" @click="copy">
-            {{ copied ? 'Copied' : 'Copy' }}
-          </button>
-        </div>
-        <p class="hint text-xs">
-          Run <code>teamtype join {{ invite.code }}</code> (single use, expires in
-          {{ countdown }})
-        </p>
-      </template>
-      <button
-        v-else
-        type="button"
-        class="label-sm btn btn-secondary"
-        :disabled="minting"
-        @click="generate"
-      >
-        {{ minting ? 'Generating...' : 'Generate join code' }}
+      <button type="button" class="label-sm btn btn-secondary" disabled>
+        Join codes are coming soon
       </button>
     </div>
 

@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
-import { useTeamtypeStore } from '@/stores/teamtype';
+import { useOkayegStore } from '@/stores/okayeg';
 import { useProjectsStore } from '@/stores/projects';
 import type { ProjectView } from '@/client/types.gen';
 import EditorWorkspace from '@/components/EditorWorkspace.vue';
@@ -10,7 +10,7 @@ import ShareProjectDialog from '@/components/ShareProjectDialog.vue';
 import LogsDialog from '@/components/LogsDialog.vue';
 
 const route = useRoute();
-const teamtype = useTeamtypeStore();
+const okayeg = useOkayegStore();
 const projects = useProjectsStore();
 
 const error = ref<string | null>(null);
@@ -18,19 +18,20 @@ const project = ref<ProjectView | null>(null);
 const sharing = ref(false);
 const showLogs = ref(false);
 
-// the workspace is shown once we're connected to the project with at least
-// one peer; until then (or on error/disconnect) we show nothing
+// the workspace is shown once we've dialed the host and the live sync is
+// running; until then (or on error/disconnect) we show nothing
 const connected = computed(
   () =>
     !error.value &&
-    !teamtype.lastDisconnect &&
-    teamtype.ready &&
-    teamtype.peers.length > 0,
+    !okayeg.lastDisconnect &&
+    okayeg.ready &&
+    okayeg.connected,
 );
 
 /**
- * Opens a project by ID, fetching its details and connecting to its teamtype
- * address.
+ * Opens a project by ID: spin up the wasm peer, register this browser's ed
+ * identity with the host, fetch the host endpoint id, and dial it to start
+ * live sync.
  * @param id The ID of the project to open.
  */
 async function openProject(id: string) {
@@ -40,9 +41,8 @@ async function openProject(id: string) {
 
   error.value = null;
   project.value = null;
-  teamtype.reset();
-  await teamtype.start();
-  teamtype.setName(`peer-${Math.floor(Math.random() * 1000)}`);
+  okayeg.reset();
+  await okayeg.start();
 
   projects
     .get(id)
@@ -54,11 +54,18 @@ async function openProject(id: string) {
     .catch(() => {});
 
   try {
-    const address = await projects.address(id);
+    const myId = okayeg.nodeId;
+    if (!myId) {
+      throw new Error('peer identity unavailable');
+    }
+    // register first so the host's .eg/trust admits us before we dial; the host
+    // re-reads trust on every incoming connection, so this is enough
+    await projects.registerPeer(id, myId);
+    const endpoint = await projects.endpoint(id);
     if (!isCurrent()) {
       return;
     }
-    teamtype.connectByAddress(address);
+    await okayeg.connect(endpoint);
   } catch (e) {
     if (isCurrent()) {
       error.value = e instanceof Error ? e.message : 'Could not connect to project';
@@ -77,7 +84,7 @@ watch(
 );
 
 onBeforeUnmount(() => {
-  teamtype.reset();
+  okayeg.reset();
 });
 </script>
 
@@ -97,9 +104,9 @@ onBeforeUnmount(() => {
         <RouterLink :to="{ name: 'projects' }" class="brand">fossenCD</RouterLink>
         <span class="sep">/</span>
         <span class="crumb">{{ project?.name ?? 'Project' }}</span>
-        <template v-if="teamtype.currentFile">
+        <template v-if="okayeg.currentFile">
           <span class="sep">/</span>
-          <span class="crumb file code-md">{{ teamtype.currentFile }}</span>
+          <span class="crumb file code-md">{{ okayeg.currentFile }}</span>
         </template>
       </nav>
 
@@ -107,20 +114,21 @@ onBeforeUnmount(() => {
 
       <div class="status">
         <span v-if="error" class="chip chip-error label-sm">{{ error }}</span>
-        <span v-else-if="!teamtype.ready" class="chip label-sm">
+        <span v-else-if="!okayeg.ready" class="chip label-sm">
+          <span class="dot dot-pending" />
+          starting&hellip;
+        </span>
+        <span v-else-if="!okayeg.connected" class="chip label-sm">
           <span class="dot dot-pending" />
           connecting&hellip;
         </span>
         <template v-else>
-          <span v-if="teamtype.nodeInfo" class="chip label-sm" :title="teamtype.nodeInfo.node_id">
+          <span v-if="okayeg.nodeId" class="chip label-sm" :title="okayeg.nodeId">
             <span class="dot dot-ok" />
-            {{ teamtype.nodeInfo.node_id.slice(0, 8) }}&hellip;
+            {{ okayeg.nodeId.slice(0, 8) }}&hellip;
           </span>
-          <span class="chip label-sm">
-            {{ teamtype.peers.length }} peer{{ teamtype.peers.length === 1 ? '' : 's' }}
-          </span>
-          <span v-if="teamtype.lastDisconnect" class="chip chip-error label-sm">
-            dropped: {{ teamtype.lastDisconnect.kind }}
+          <span v-if="okayeg.lastDisconnect" class="chip chip-error label-sm">
+            dropped: {{ okayeg.lastDisconnect }}
           </span>
         </template>
       </div>

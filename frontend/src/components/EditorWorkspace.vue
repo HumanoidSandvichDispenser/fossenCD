@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { PhFilePdf } from '@phosphor-icons/vue';
 
-import { useTeamtypeStore } from '@/stores/teamtype';
+import { useOkayegStore } from '@/stores/okayeg';
 import { useZoom } from '@/composables/useZoom';
 import { useCompileStatus } from '@/composables/useCompileStatus';
 import { useDiagnostics } from '@/composables/useDiagnostics';
@@ -17,11 +17,11 @@ import ZoomBar from './workspace/ZoomBar.vue';
 import CompileStatus from './workspace/CompileStatus.vue';
 import Outline from './workspace/Outline.vue';
 
-const teamtype = useTeamtypeStore();
+const okayeg = useOkayegStore();
 
 // Typst rendering only makes sense for .typ files; the preview tracks the
 // chosen build target
-const isTypst = computed(() => teamtype.previewFile?.toLowerCase().endsWith('.typ') ?? false);
+const isTypst = computed(() => okayeg.previewFile?.toLowerCase().endsWith('.typ') ?? false);
 
 const zoomState = useZoom();
 const compileStatus = useCompileStatus();
@@ -32,8 +32,8 @@ const { exporting: pdfExporting, error: pdfError, exportPdf } = useExportPdf();
 // outline of the file being edited, derived from its source markup; recomputes
 // reactively as the file's content (in the VFS) or the selection changes
 const outline = computed(() => {
-  const file = teamtype.currentFile;
-  const text = file ? teamtype.read(file) : undefined;
+  const file = okayeg.currentFile;
+  const text = file ? okayeg.read(file) : undefined;
   return text ? parseOutline(text) : [];
 });
 
@@ -70,11 +70,11 @@ onBeforeUnmount(() => {
     <div ref="sidebar" class="leftbar" :style="{ '--files-basis': `${filesPercent}%` }">
       <FileList
         class="leftbar-files"
-        :files="teamtype.files"
-        :current-file="teamtype.currentFile"
-        :preview-file="teamtype.previewFile"
-        @select="teamtype.selectFile($event)"
-        @preview="teamtype.setPreviewFile($event)"
+        :files="okayeg.files"
+        :current-file="okayeg.currentFile"
+        :preview-file="okayeg.previewFile"
+        @select="okayeg.selectFile($event)"
+        @preview="okayeg.setPreviewFile($event)"
       />
       <div
         class="divider divider-h"
@@ -112,11 +112,11 @@ onBeforeUnmount(() => {
           <!-- end -->
           <CompileStatus :status="compileStatus" />
           <button
-            v-if="isTypst && teamtype.previewFile"
+            v-if="isTypst && okayeg.previewFile"
             class="label-sm btn btn-sm btn-secondary"
             :disabled="pdfExporting"
             :title="pdfError ?? 'Export the preview as PDF'"
-            @click="teamtype.previewFile && exportPdf(teamtype.previewFile, teamtype.vfs)"
+            @click="okayeg.previewFile && exportPdf(okayeg.previewFile, okayeg.vfs)"
           >
             <PhFilePdf :size="14" />
             {{ pdfExporting ? 'Exporting…' : 'Export PDF' }}
@@ -135,9 +135,9 @@ onBeforeUnmount(() => {
       <section class="preview-pane">
         <!-- unsure what pattern to use once we have multiple preview types -->
         <TypstPreview
-          v-if="isTypst && teamtype.previewFile"
-          :main-file="teamtype.previewFile"
-          :vfs="teamtype.vfs"
+          v-if="isTypst && okayeg.previewFile"
+          :main-file="okayeg.previewFile"
+          :vfs="okayeg.vfs"
           :zoom="zoomState.zoom.value"
           :compile-status="compileStatus"
           :diagnostics="diagnostics"
@@ -145,8 +145,8 @@ onBeforeUnmount(() => {
         <div v-else class="preview-placeholder">
           <span class="preview-title serif-lg">Preview</span>
           <span class="preview-sub text-sm">
-            <template v-if="teamtype.previewFile">
-              Preview is currently not available for <code>{{ teamtype.previewFile }}</code>.
+            <template v-if="okayeg.previewFile">
+              Preview is currently not available for <code>{{ okayeg.previewFile }}</code>.
             </template>
             <template v-else>
               Select a file to preview.

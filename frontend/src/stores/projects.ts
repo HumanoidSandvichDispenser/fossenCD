@@ -6,14 +6,16 @@ import {
   getProject,
   createProject,
   deleteProject,
-  projectAddress,
-  projectJoinCode,
+  projectEndpoint,
+  listPeers as listPeersReq,
+  registerPeer as registerPeerReq,
+  unregisterPeer as unregisterPeerReq,
   listMembers as listMembersReq,
   addMember as addMemberReq,
   removeMember as removeMemberReq,
   projectLogs,
 } from '@/client/sdk.gen';
-import type { ProjectView, MemberView, LogsBody, JoinCodeBody } from '@/client/types.gen';
+import type { ProjectView, MemberView, LogsBody, PeerView } from '@/client/types.gen';
 import { useClientStore } from './client';
 
 /**
@@ -71,21 +73,37 @@ export const useProjectsStore = defineStore('projects', () => {
   }
 
   /**
-   * Fetch a project's secret address for web peers to connect by.
+   * Fetch the host endpoint id a browser peer dials with `connect(endpointId)`.
    */
-  async function address(id: string) {
-    const { data, error } = await projectAddress({ client, path: { id } });
+  async function endpoint(id: string) {
+    const { data, error } = await projectEndpoint({ client, path: { id } });
     if (error || !data) {
-      throw new Error(errorMessage(error, 'Could not load project address'));
+      throw new Error(errorMessage(error, 'Could not load project endpoint'));
     }
-    return data.address;
+    return data.endpointId;
   }
 
-  /** Mint (or reuse and extend) a wormhole join code for terminal peers. */
-  async function joinCode(id: string): Promise<JoinCodeBody> {
-    const { data, error } = await projectJoinCode({ client, path: { id } });
+  /** Register this browser's ed identity (its EndpointId) to sync a project. */
+  async function registerPeer(id: string, endpointId: string) {
+    const { error } = await registerPeerReq({ client, path: { id }, body: { endpointId } });
+    if (error) {
+      throw new Error(errorMessage(error, 'Could not register with project'));
+    }
+  }
+
+  /** Revoke a registered browser endpoint (owner, or the user who registered it). */
+  async function unregisterPeer(id: string, endpointId: string) {
+    const { error } = await unregisterPeerReq({ client, path: { id, endpointId } });
+    if (error) {
+      throw new Error(errorMessage(error, 'Could not revoke peer'));
+    }
+  }
+
+  /** List the browser endpoints authorized to sync a project. */
+  async function peers(id: string): Promise<PeerView[]> {
+    const { data, error } = await listPeersReq({ client, path: { id } });
     if (error || !data) {
-      throw new Error(errorMessage(error, 'Could not mint join code'));
+      throw new Error(errorMessage(error, 'Could not load peers'));
     }
     return data;
   }
@@ -132,8 +150,10 @@ export const useProjectsStore = defineStore('projects', () => {
     get,
     create,
     remove,
-    address,
-    joinCode,
+    endpoint,
+    registerPeer,
+    unregisterPeer,
+    peers,
     members,
     addMember,
     removeMember,

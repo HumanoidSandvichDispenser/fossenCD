@@ -8,8 +8,8 @@ import wasm from 'vite-plugin-wasm';
 // https://vite.dev/config/
 export default defineConfig({
   // wasm() lets Vite consume codemirror-lang-typst's `--target=bundler` wasm
-  // parser (ESM .wasm import). The generated loader uses top-level await,
-  // which the modern build target and dev server support natively.
+  // parser (ESM .wasm import), and the okayeg-wasm loader's top-level await.
+  // The modern build target and dev server support both natively.
   plugins: [vue(), vueDevTools(), wasm()],
   resolve: {
     alias: {
@@ -17,7 +17,9 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    exclude: ['@sandvichxyz/teamtype-wasm'],
+    // a published wasm pkg: keep it out of the pre-bundle so `?url` and the
+    // wasm import resolve against the real files, not a flattened copy
+    exclude: ['@sandvichxyz/okayeg-wasm'],
   },
   server: {
     fs: {

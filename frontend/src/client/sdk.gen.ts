@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AddMemberData, AddMemberErrors, AddMemberResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, DeleteProjectData, DeleteProjectErrors, DeleteProjectResponses, GetProjectData, GetProjectErrors, GetProjectResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, MeData, MeErrors, MeResponses, ProjectAddressData, ProjectAddressErrors, ProjectAddressResponses, ProjectJoinCodeData, ProjectJoinCodeErrors, ProjectJoinCodeResponses, ProjectLogsData, ProjectLogsErrors, ProjectLogsResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses } from './types.gen';
+import type { AddMemberData, AddMemberErrors, AddMemberResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, DeleteProjectData, DeleteProjectErrors, DeleteProjectResponses, GetProjectData, GetProjectErrors, GetProjectResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListPeersData, ListPeersErrors, ListPeersResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, MeData, MeErrors, MeResponses, ProjectEndpointData, ProjectEndpointErrors, ProjectEndpointResponses, ProjectLogsData, ProjectLogsErrors, ProjectLogsResponses, RegisterData, RegisterErrors, RegisterPeerData, RegisterPeerErrors, RegisterPeerResponses, RegisterResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, UnregisterPeerData, UnregisterPeerErrors, UnregisterPeerResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -58,7 +58,7 @@ export const register = <ThrowOnError extends boolean = false>(options: Options<
 export const listProjects = <ThrowOnError extends boolean = false>(options?: Options<ListProjectsData, ThrowOnError>) => (options?.client ?? client).get<ListProjectsResponses, ListProjectsErrors, ThrowOnError>({ url: '/projects', ...options });
 
 /**
- * Create a project and its teamtype key
+ * Create a project and its okayeg key
  */
 export const createProject = <ThrowOnError extends boolean = false>(options: Options<CreateProjectData, ThrowOnError>) => (options.client ?? client).post<CreateProjectResponses, CreateProjectErrors, ThrowOnError>({
     url: '/projects',
@@ -80,17 +80,34 @@ export const deleteProject = <ThrowOnError extends boolean = false>(options: Opt
 export const getProject = <ThrowOnError extends boolean = false>(options: Options<GetProjectData, ThrowOnError>) => (options.client ?? client).get<GetProjectResponses, GetProjectErrors, ThrowOnError>({ url: '/projects/{id}', ...options });
 
 /**
- * Get the secret address for web/wasm peers
+ * Get the host endpoint id for browser/wasm peers to dial
  */
-export const projectAddress = <ThrowOnError extends boolean = false>(options: Options<ProjectAddressData, ThrowOnError>) => (options.client ?? client).get<ProjectAddressResponses, ProjectAddressErrors, ThrowOnError>({ url: '/projects/{id}/address', ...options });
+export const projectEndpoint = <ThrowOnError extends boolean = false>(options: Options<ProjectEndpointData, ThrowOnError>) => (options.client ?? client).get<ProjectEndpointResponses, ProjectEndpointErrors, ThrowOnError>({ url: '/projects/{id}/endpoint', ...options });
 
 /**
- * Mint a wormhole join code for terminal peers
+ * List the browser endpoints authorized to sync this project
  */
-export const projectJoinCode = <ThrowOnError extends boolean = false>(options: Options<ProjectJoinCodeData, ThrowOnError>) => (options.client ?? client).post<ProjectJoinCodeResponses, ProjectJoinCodeErrors, ThrowOnError>({ url: '/projects/{id}/join-code', ...options });
+export const listPeers = <ThrowOnError extends boolean = false>(options: Options<ListPeersData, ThrowOnError>) => (options.client ?? client).get<ListPeersResponses, ListPeersErrors, ThrowOnError>({ url: '/projects/{id}/peers', ...options });
 
 /**
- * View recent stdout/stderr of the project's teamtype daemon
+ * Authorize a browser endpoint (its ed identity) to sync the project
+ */
+export const registerPeer = <ThrowOnError extends boolean = false>(options: Options<RegisterPeerData, ThrowOnError>) => (options.client ?? client).post<RegisterPeerResponses, RegisterPeerErrors, ThrowOnError>({
+    url: '/projects/{id}/peers',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Revoke a browser endpoint's access
+ */
+export const unregisterPeer = <ThrowOnError extends boolean = false>(options: Options<UnregisterPeerData, ThrowOnError>) => (options.client ?? client).delete<UnregisterPeerResponses, UnregisterPeerErrors, ThrowOnError>({ url: '/projects/{id}/peers/{endpointId}', ...options });
+
+/**
+ * View recent stdout/stderr of the project's eg daemon
  */
 export const projectLogs = <ThrowOnError extends boolean = false>(options: Options<ProjectLogsData, ThrowOnError>) => (options.client ?? client).get<ProjectLogsResponses, ProjectLogsErrors, ThrowOnError>({ url: '/projects/{id}/logs', ...options });
 
@@ -112,6 +129,6 @@ export const addMember = <ThrowOnError extends boolean = false>(options: Options
 });
 
 /**
- * Remove a collaborator (owner only)
+ * Remove a collaborator and revoke their peers (owner only)
  */
 export const removeMember = <ThrowOnError extends boolean = false>(options: Options<RemoveMemberData, ThrowOnError>) => (options.client ?? client).delete<RemoveMemberResponses, RemoveMemberErrors, ThrowOnError>({ url: '/projects/{id}/members/{userId}', ...options });
