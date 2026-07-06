@@ -3,11 +3,9 @@
 # Select how the `eg` CLI enters the image:
 #   EG_SOURCE=git   (default) build eg from the okayeg repo at OKAYEG_REV
 #   EG_SOURCE=local skip the in-image build; a prebuilt binary is bind-mounted
-#                   over /usr/local/bin/eg at runtime (see docker-compose.yml's
-#                   EG_BIN_HOST volume). Lets you iterate on okayeg by rebuilding
-#                   in the okayeg tree with `cargo build --release -p eg` and
-#                   pointing EG_BIN_HOST at the resulting binary (must be a
-#                   musl/static build for the alpine base).
+#                   over /usr/local/bin/eg at runtime (see
+#                   docker-compose.local.yml.example). The binary must be a
+#                   musl/static build for the alpine base.
 # BuildKit only builds the stage the final image references, so the unused path
 # costs nothing.
 ARG EG_SOURCE=git
@@ -35,7 +33,8 @@ RUN apk add --no-cache build-base curl
 RUN go install github.com/air-verse/air@latest
 
 # the eg daemon hosts each project's share dir (see internal/okayeg/host.go).
-# With EG_SOURCE=local this is overwritten by the EG_BIN_HOST bind mount.
+# With EG_SOURCE=local a runtime bind mount overwrites this placeholder
+# (see docker-compose.local.yml.example).
 COPY --from=eg /out/bin/eg /usr/local/bin/eg
 
 COPY . /app

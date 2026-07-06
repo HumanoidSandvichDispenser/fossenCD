@@ -1,0 +1,20 @@
+# Local-dev override: bind your locally built okayeg artifacts over the
+# copies baked into the images. A cargo or wasm-pack build on the host then
+# reaches the containers without an image rebuild or an npm publish.
+#
+# To use: copy to docker-compose.local.yml (gitignored) and activate it
+# in .env (see .env.example).
+#
+# Set both variables whenever this file is active. Paths resolve relative
+# to this directory. Note that once COMPOSE_FILE is set, an explicit -f
+# flag replaces the list instead of adding to it.
+services:
+  backend:
+    volumes:
+      # prebuilt eg over the image's baked copy
+      - ${FOSSENCD_EG_BIN_HOST}:/usr/local/bin/eg
+  frontend:
+    volumes:
+      # wasm-pack output over the registry package inside the
+      # frontend_node_modules volume
+      - ${FOSSENCD_OKAYEG_WASM}:/app/node_modules/@sandvichxyz/okayeg-wasm
