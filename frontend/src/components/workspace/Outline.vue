@@ -39,7 +39,6 @@ function onToggle(event: CustomEvent<{ originalEvent: Event }>) {
 
 <template>
   <aside class="outline">
-    <div class="outline-head label-xs">Outline</div>
     <TreeRoot
       v-if="tree.length"
       v-slot="{ flattenItems }"

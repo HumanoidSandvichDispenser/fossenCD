@@ -27,18 +27,21 @@ func newServices(t *testing.T) *Services {
 	t.Cleanup(func() { sqlDB.Close() })
 
 	return New(Options{
-		DB:         db,
-		FS:         afero.NewMemMapFs(),
-		DataDir:    "data",
-		SessionTTL: time.Hour,
-		Host:       &noopHost{},
+		DB:          db,
+		FS:          afero.NewMemMapFs(),
+		DataDir:     "data",
+		SessionTTL:  time.Hour,
+		Host:        &noopHost{},
+		AuthzScript: "/app/scripts/eg-authz",
+		AuthzSocket: "/data/authz.sock",
 	})
 }
 
-// noopHost is an okayeg.Host that records EnsureHost calls without spawning
-// anything, so service tests stay hermetic.
+// noopHost is an okayeg.Host that records EnsureHost and Revoke calls without
+// spawning anything, so service tests stay hermetic.
 type noopHost struct {
 	ensured map[string]int
+	revoked []string // "projectID endpointID" per Revoke call
 }
 
 func (h *noopHost) EnsureHost(id string) {
@@ -48,7 +51,13 @@ func (h *noopHost) EnsureHost(id string) {
 	h.ensured[id]++
 }
 
-func (h *noopHost) Stop(string)                {}
+func (h *noopHost) Stop(string) {}
+
+func (h *noopHost) Revoke(id, endpointID string) error {
+	h.revoked = append(h.revoked, id+" "+endpointID)
+	return nil
+}
+
 func (h *noopHost) Logs(string) (string, bool) { return "", false }
 
 var _ okayeg.Host = (*noopHost)(nil)

@@ -1,0 +1,12 @@
+#!/bin/sh
+# The authz hook each project's .eg/config.toml names. eg runs it per incoming
+# connection with the peer's endpoint id on stdin; the verdict goes to stdout.
+#
+#   eg-authz <socket> <project-id>
+#
+# It forwards the decision to the fossencd backend over its authz unix socket.
+# curl -f exits nonzero on the backend's 403, which eg reads as a refusal, so
+# a missing socket or a down backend also fails closed.
+set -eu
+read -r peer || exit 1
+exec curl -sf --unix-socket "$1" "http://authz/projects/$2/peers/$peer"

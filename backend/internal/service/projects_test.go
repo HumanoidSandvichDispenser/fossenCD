@@ -8,8 +8,6 @@ import (
 	"testing"
 
 	"github.com/spf13/afero"
-
-	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/okayeg"
 )
 
 const (
@@ -154,7 +152,26 @@ func TestDeleteOtherUsersProject(t *testing.T) {
 	}
 }
 
-func TestRegisterPeerWritesTrustAndDB(t *testing.T) {
+func TestCreateProjectWritesAuthzConfig(t *testing.T) {
+	svc := newServices(t)
+	ctx := context.Background()
+	uid := ownerID(t, svc, "ryan")
+
+	p, err := svc.Projects.Create(ctx, uid, "thesis")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	raw, err := afero.ReadFile(svc.Projects.fs, filepath.Join(svc.Projects.shareDir(p.ID), ".eg", "config.toml"))
+	if err != nil {
+		t.Fatalf("read config.toml: %v", err)
+	}
+	want := "[authz]\ncommand = [\"/app/scripts/eg-authz\", \"/data/authz.sock\", \"" + p.ID + "\"]\n"
+	if string(raw) != want {
+		t.Fatalf("config.toml = %q, want %q", raw, want)
+	}
+}
+
+func TestRegisterPeerWritesDB(t *testing.T) {
 	svc := newServices(t)
 	ctx := context.Background()
 	a := ownerID(t, svc, "alice")
@@ -162,15 +179,6 @@ func TestRegisterPeerWritesTrustAndDB(t *testing.T) {
 
 	if err := svc.Projects.RegisterPeer(ctx, a, p.ID, endpointAlice); err != nil {
 		t.Fatalf("RegisterPeer: %v", err)
-	}
-
-	// trust file has the line
-	grant, err := okayeg.ListTrust(svc.Projects.fs, svc.Projects.shareDir(p.ID))
-	if err != nil {
-		t.Fatalf("ListTrust: %v", err)
-	}
-	if len(grant) != 1 || grant[0].EndpointID != endpointAlice || grant[0].UserID != a {
-		t.Fatalf("trust grant = %+v, want alice user %d", grant, a)
 	}
 
 	// DB has the row
@@ -222,10 +230,6 @@ func TestRegisterPeerIsIdempotent(t *testing.T) {
 	if len(peers) != 1 {
 		t.Fatalf("expected 1 peer, got %d", len(peers))
 	}
-	grant, _ := okayeg.ListTrust(svc.Projects.fs, svc.Projects.shareDir(p.ID))
-	if len(grant) != 1 {
-		t.Fatalf("expected 1 trust row, got %d", len(grant))
-	}
 }
 
 func TestUnregisterPeerOwnerCanRemoveAny(t *testing.T) {
@@ -248,9 +252,9 @@ func TestUnregisterPeerOwnerCanRemoveAny(t *testing.T) {
 	if len(peers) != 0 {
 		t.Fatalf("expected 0 peers, got %d", len(peers))
 	}
-	grant, _ := okayeg.ListTrust(svc.Projects.fs, svc.Projects.shareDir(p.ID))
-	if len(grant) != 0 {
-		t.Fatalf("expected 0 trust rows, got %d", len(grant))
+	host := svc.Projects.host.(*noopHost)
+	if len(host.revoked) != 1 || host.revoked[0] != p.ID+" "+endpointBob {
+		t.Fatalf("revoked = %v, want bob's session closed", host.revoked)
 	}
 }
 
@@ -290,14 +294,12 @@ func TestRemoveMemberRevokesPeers(t *testing.T) {
 	if err := svc.Projects.RemoveMember(ctx, a, p.ID, b); err != nil {
 		t.Fatalf("RemoveMember: %v", err)
 	}
-	grant, _ := okayeg.ListTrust(svc.Projects.fs, svc.Projects.shareDir(p.ID))
-	for _, g := range grant {
-		if g.UserID == b {
-			t.Fatalf("bob's trust line survived removal: %+v", g)
-		}
-	}
 	peers, _ := svc.Projects.ListPeers(ctx, a, p.ID)
 	if len(peers) != 0 {
 		t.Fatalf("bob's peer rows survived removal: %+v", peers)
+	}
+	host := svc.Projects.host.(*noopHost)
+	if len(host.revoked) != 2 {
+		t.Fatalf("revoked = %v, want both of bob's sessions closed", host.revoked)
 	}
 }

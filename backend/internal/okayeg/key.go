@@ -1,12 +1,13 @@
 // Package okayeg bridges fossenCD to the okayeg `eg` daemon. It derives the
-// host's EndpointId from .eg/key, manages the per-repo .eg/trust file that
-// `eg serve` re-reads on every incoming connection, and supervises an `eg serve`
-// process per project.
+// host's EndpointId from .eg/key, writes the per-repo .eg/config.toml that
+// points eg's connection gate at fossenCD's authz command, and supervises an
+// `eg serve` process per project, revoking live sessions over its stdin repl.
 //
 // The on-disk shapes match eg::net (KEY_PATH = ".eg/key", a single 32-byte
-// ed25519 seed) and eg::trust (TRUST_PATH = ".eg/trust"). The EndpointId string
-// format is iroh 1.0's EndpointId Display, which is lowercase hex of the ed25519
-// public key, the same derivation teamtype used for its node id.
+// ed25519 seed) and eg::config (CONFIG_PATH = ".eg/config.toml"). The
+// EndpointId string format is iroh 1.0's EndpointId Display, which is lowercase
+// hex of the ed25519 public key, the same derivation teamtype used for its
+// node id.
 package okayeg
 
 import (
@@ -21,6 +22,9 @@ import (
 	"github.com/spf13/afero"
 )
 
+// egDir is the metadata subdirectory eg keeps at the repo root.
+const egDir = ".eg"
+
 // KeyLen is the on-disk size of .eg/key: a single 32-byte ed25519 seed. Must
 // match eg::net::repo_secret (".eg/key").
 const KeyLen = 32
@@ -28,6 +32,7 @@ const KeyLen = 32
 // endpointIDRe matches an iroh EndpointId as eg emits and accepts one:
 // 64 lowercase hex chars (the ed25519 public key). The browser wasm client's
 // nodeId() uses the same Display, so registrations always come in this form.
+// Used to reject bogus registrations before they reach the database.
 var endpointIDRe = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // Key is an okayeg host keypair loaded from .eg/key: an ed25519 seed.
@@ -36,7 +41,7 @@ type Key struct {
 }
 
 // EndpointID is the lowercase-hex ed25519 public key a peer dials (with `eg
-// join`/`eg pull`) and that the host authorizes in .eg/trust. It matches iroh
+// join`/`eg pull`) and that the host's gate authorizes. It matches iroh
 // 1.0's EndpointId Display and eg's `eg id` output, byte for byte: verified
 // against `eg id` from the same seed.
 func (k Key) EndpointID() string {
@@ -45,8 +50,7 @@ func (k Key) EndpointID() string {
 }
 
 // ValidEndpointID reports whether s is a well-formed EndpointId as the browser
-// sends it (64 lowercase hex chars). Used to reject bogus registrations before
-// they reach the trust file.
+// sends it (64 lowercase hex chars).
 func ValidEndpointID(s string) bool {
 	return endpointIDRe.MatchString(s)
 }

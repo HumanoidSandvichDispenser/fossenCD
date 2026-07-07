@@ -11,6 +11,29 @@ import { VirtualFs } from '@/vfs';
 
 type ContentListener = (file: string, text: string) => void;
 
+/**
+ * A comment as reflected by okayeg-wasm's onComments: anchored to a file span
+ * (`range` in Unicode code points) or threaded under a parent comment, with
+ * all consumer-owned keys under `fields`.
+ */
+export interface OkayegComment {
+  id: string;
+  file: string | null;
+  parent: string | null;
+  createdAt: number;
+  range: [number, number] | null;
+  orphaned: boolean;
+  fields: Record<string, unknown>;
+}
+
+/** The comment field conventions fossenCD writes. */
+export interface CommentFields {
+  body: string;
+  author: string;
+  /** The anchored text as it read when the comment was created. */
+  quote?: string;
+}
+
 function isTypst(file: string): boolean {
   return file.toLowerCase().endsWith('.typ');
 }
@@ -37,6 +60,11 @@ export const useOkayegStore = defineStore('okayeg', () => {
   const previewFile = ref<string | null>(null);
   const logs = ref<string[]>([]);
   const lastDisconnect = ref<string | null>(null);
+  // all comments in the project, re-reflected (with anchors re-resolved) on
+  // every change tick
+  const comments = ref<OkayegComment[]>([]);
+  // the thread highlighted in both the editor and the comments panel
+  const activeCommentId = ref<string | null>(null);
 
   const contentListeners = new Set<ContentListener>();
 
@@ -84,6 +112,9 @@ export const useOkayegStore = defineStore('okayeg', () => {
         listener(file, text);
       }
     });
+    c.onComments((all: OkayegComment[]) => {
+      comments.value = all;
+    });
     c.onDisconnect((reason: string) => {
       connected.value = false;
       lastDisconnect.value = reason;
@@ -123,6 +154,8 @@ export const useOkayegStore = defineStore('okayeg', () => {
     vfs.clear();
     lastDisconnect.value = null;
     logs.value = [];
+    comments.value = [];
+    activeCommentId.value = null;
   }
 
   function subscribe<T>(set: Set<T>, listener: T): () => void {
@@ -171,6 +204,48 @@ export const useOkayegStore = defineStore('okayeg', () => {
     client?.deleteFile(path);
   }
 
+  /**
+   * Anchor a comment to `[start, end)` (Unicode code points) in a file.
+   * Returns the new comment's id, or null if the file or range is invalid.
+   */
+  function addComment(
+    file: string,
+    start: number,
+    end: number,
+    fields: CommentFields,
+  ): string | null {
+    return client?.addComment(file, start, end, fields) ?? null;
+  }
+
+  /** Reply under a comment. Returns the reply's id, or null. */
+  function replyComment(parent: string, fields: CommentFields): string | null {
+    return client?.replyComment(parent, fields) ?? null;
+  }
+
+  /** Set one consumer field (a scalar) on a comment. */
+  function setComment(id: string, key: string, value: unknown): boolean {
+    return client?.setComment(id, key, value) ?? false;
+  }
+
+  /** Remove a comment and every reply threaded under it. */
+  function removeComment(id: string) {
+    if (!client) {
+      return;
+    }
+    for (const reply of comments.value.filter((c) => c.parent === id)) {
+      removeComment(reply.id);
+    }
+    client.removeComment(id);
+    if (activeCommentId.value === id) {
+      activeCommentId.value = null;
+    }
+  }
+
+  /** Highlight a thread in both the editor and the comments panel. */
+  function setActiveComment(id: string | null) {
+    activeCommentId.value = id;
+  }
+
   return {
     vfs,
     ready,
@@ -181,6 +256,8 @@ export const useOkayegStore = defineStore('okayeg', () => {
     previewFile,
     logs,
     lastDisconnect,
+    comments,
+    activeCommentId,
     start,
     reset,
     connect,
@@ -190,6 +267,11 @@ export const useOkayegStore = defineStore('okayeg', () => {
     applyEdit,
     createFile,
     deleteFile,
+    addComment,
+    replyComment,
+    setComment,
+    removeComment,
+    setActiveComment,
     onContent: (listener: ContentListener) => subscribe(contentListeners, listener),
   };
 });

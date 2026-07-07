@@ -45,6 +45,40 @@ export const editorTheme = EditorView.theme(
     //'.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
     //  backgroundColor: 'var(--color-accent-200)',
     //},
+    '.cm-comment-span': {
+      backgroundColor: 'color-mix(in srgb, var(--color-warning-200) 55%, transparent)',
+      borderBottom: '2px solid var(--color-warning-200)',
+      cursor: 'pointer',
+    },
+    '.cm-comment-span-active': {
+      backgroundColor: 'var(--color-warning-200)',
+      borderBottomColor: 'var(--color-warning-500)',
+    },
+    '.cm-comment-span-orphaned': {
+      backgroundColor: 'transparent',
+    },
+    '.cm-comment-orphan': {
+      color: 'var(--color-warning)',
+      fontWeight: 'bold',
+      cursor: 'pointer',
+    },
+    '.cm-comment-add-tooltip': {
+      backgroundColor: 'transparent',
+      border: 'none',
+    },
+    '.cm-comment-add': {
+      padding: 'var(--space-1) var(--space-2)',
+      font: 'inherit',
+      fontSize: '12px',
+      color: 'var(--color-text)',
+      backgroundColor: 'var(--color-bg-card)',
+      border: 'var(--border-thin) solid var(--color-border)',
+      borderRadius: 'var(--radius-sm)',
+      cursor: 'pointer',
+    },
+    '.cm-comment-add:hover': {
+      backgroundColor: 'var(--color-surface-hover)',
+    },
   },
   { dark: false },
 );

@@ -12,11 +12,13 @@ import (
 )
 
 type ProjectService struct {
-	projects *store.ProjectStore
-	users    *store.UserStore
-	fs       afero.Fs
-	dataDir  string
-	host     okayeg.Host
+	projects    *store.ProjectStore
+	users       *store.UserStore
+	fs          afero.Fs
+	dataDir     string
+	host        okayeg.Host
+	authzScript string
+	authzSocket string
 }
 
 func (s *ProjectService) Create(ctx context.Context, ownerID uint, name string) (store.Project, error) {
@@ -25,14 +27,53 @@ func (s *ProjectService) Create(ctx context.Context, ownerID uint, name string) 
 		return store.Project{}, err
 	}
 
-	// if the key can't be created, delete the project to avoid a broken state.
-	// EnsureKey also makes the share dir a real eg repo (.eg/key), which is
-	// what `eg serve` needs to self-initialize on first connect.
+	// if the repo can't be seeded, delete the project to avoid a broken state.
+	// EnsureKey makes the share dir a real eg repo (.eg/key), which is what
+	// `eg serve` needs to self-initialize on first connect; the config points
+	// eg's connection gate at our authz command, so the DB decides who syncs.
 	if _, err := okayeg.EnsureKey(s.fs, s.shareDir(p.ID)); err != nil {
 		_ = s.projects.Delete(ctx, p.ID)
 		return store.Project{}, err
 	}
+	if err := s.writeAuthzConfig(p.ID); err != nil {
+		_ = s.projects.Delete(ctx, p.ID)
+		return store.Project{}, err
+	}
 	return p, nil
+}
+
+// writeAuthzConfig writes the project's .eg/config.toml naming the authz
+// command eg runs per connection: the script, the backend's authz socket, and
+// the project id. No-op when no script is configured (eg then uses .eg/trust).
+func (s *ProjectService) writeAuthzConfig(projectID string) error {
+	if s.authzScript == "" {
+		return nil
+	}
+	argv := []string{s.authzScript, s.authzSocket, projectID}
+	return okayeg.WriteAuthzConfig(s.fs, s.shareDir(projectID), argv)
+}
+
+// AuthorizePeer is the decision behind the authz socket: whether endpointID may
+// sync projectID. It holds when the peer is registered on the project and its
+// registering user is still a member. eg asks once per incoming connection.
+func (s *ProjectService) AuthorizePeer(ctx context.Context, projectID, endpointID string) (bool, error) {
+	if !okayeg.ValidEndpointID(endpointID) {
+		return false, nil
+	}
+	peer, err := s.projects.GetPeer(ctx, projectID, endpointID)
+	if errors.Is(err, store.ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if _, err := s.projects.GetMember(ctx, projectID, peer.UserID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *ProjectService) List(ctx context.Context, userID uint) ([]store.Project, error) {
@@ -72,14 +113,18 @@ func (s *ProjectService) Endpoint(ctx context.Context, userID uint, id string) (
 		return "", err
 	}
 
+	// re-written on every start path so projects created before the authz
+	// hook existed (or with a stale script/socket path) heal on first use
+	if err := s.writeAuthzConfig(id); err != nil {
+		return "", err
+	}
 	s.host.EnsureHost(id)
 	return key.EndpointID(), nil
 }
 
 // RegisterPeer authorizes a browser's ed identity (its EndpointId) to sync the
-// project, recording it in .eg/trust (the enforcement eg re-reads on every
-// connect) and in the project_peer table (the queryable record). Requires
-// membership; tags the registering user on the trust line. Idempotent.
+// project by recording it in the project_peer table, which the authz command
+// consults when the peer connects. Requires membership. Idempotent.
 func (s *ProjectService) RegisterPeer(ctx context.Context, userID uint, projectID, endpointID string) error {
 	if err := s.access(ctx, userID, projectID); err != nil {
 		return err
@@ -88,20 +133,21 @@ func (s *ProjectService) RegisterPeer(ctx context.Context, userID uint, projectI
 		return ErrBadRequest
 	}
 
-	if err := okayeg.SetTrust(s.fs, s.shareDir(projectID), endpointID, userID); err != nil {
-		return err
-	}
 	if err := s.projects.AddPeer(ctx, projectID, userID, endpointID); err != nil {
 		return mapErr(err)
 	}
 
+	if err := s.writeAuthzConfig(projectID); err != nil {
+		return err
+	}
 	s.host.EnsureHost(projectID)
 	return nil
 }
 
-// UnregisterPeer revokes a browser's access: removes the trust line (takes
-// effect on the peer's next connect) and drops the project_peer row. The
-// project owner may remove any peer; a member may only remove their own.
+// UnregisterPeer revokes a browser's access: drops the project_peer row (so
+// the authz command refuses the peer's next connection) and then closes any
+// live session over the daemon's stdin repl. The project owner may remove any
+// peer; a member may only remove their own.
 func (s *ProjectService) UnregisterPeer(ctx context.Context, userID uint, projectID, endpointID string) error {
 	peer, err := s.projects.GetPeer(ctx, projectID, endpointID)
 	if err != nil {
@@ -117,14 +163,11 @@ func (s *ProjectService) UnregisterPeer(ctx context.Context, userID uint, projec
 		return ErrUnauthorized
 	}
 
-	if err := okayeg.RemoveTrust(s.fs, s.shareDir(projectID), endpointID); err != nil {
-		return err
-	}
 	if err := s.projects.RemovePeer(ctx, projectID, endpointID); err != nil {
 		return mapErr(err)
 	}
 
-	return nil
+	return s.host.Revoke(projectID, endpointID)
 }
 
 // ListPeers returns the endpoints authorized on a project, with their
@@ -160,20 +203,22 @@ func (s *ProjectService) RemoveMember(ctx context.Context, actorID uint, id stri
 		return mapErr(err)
 	}
 
-	// revoke trust before the member row, so a failure leaves the user still a
-	// member rather than a non-member who can still connect
-	for _, p := range peers {
-		if err := okayeg.RemoveTrust(s.fs, s.shareDir(id), p.EndpointID); err != nil {
-			return err
+	// drop the peer rows before the member row, so a failure leaves the user
+	// still a member rather than a non-member whose browsers can still connect
+	if len(peers) > 0 {
+		if err := s.projects.RemovePeersByUser(ctx, id, userID); err != nil {
+			return mapErr(err)
 		}
 	}
-
 	if err := s.projects.RemoveMember(ctx, id, userID); err != nil {
 		return mapErr(err)
 	}
-	if len(peers) > 0 {
-		// best-effort: the trust lines are already gone; the DB rows are clerical
-		_ = s.projects.RemovePeersByUser(ctx, id, userID)
+
+	// policy is updated; now close whatever the user still has running
+	for _, p := range peers {
+		if err := s.host.Revoke(id, p.EndpointID); err != nil {
+			return err
+		}
 	}
 
 	return nil

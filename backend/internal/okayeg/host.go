@@ -3,6 +3,7 @@ package okayeg
 import (
 	"context"
 	"fmt"
+	"io"
 	"os/exec"
 	"path/filepath"
 	"sync"
@@ -27,6 +28,10 @@ type Host interface {
 	EnsureHost(id string)
 	// Stop terminates id's daemon and waits for exit.
 	Stop(id string)
+	// Revoke closes endpointID's live sessions on id's daemon, via the repl on
+	// the daemon's stdin. A no-op when no daemon is running (there is nothing
+	// to close; the peer's next connection is the gate's call).
+	Revoke(id, endpointID string) error
 	// Logs returns the recent stdout+stderr captured for id's daemon, and
 	// whether a host is currently registered for id.
 	Logs(id string) (string, bool)
@@ -51,6 +56,7 @@ type hostProc struct {
 	cancel context.CancelFunc
 	done   chan struct{}
 	log    *logBuffer
+	stdin  io.WriteCloser // the running daemon's repl, nil until it spawns
 }
 
 // logBuffer is a byte ring capturing the most recent daemon output.
@@ -127,6 +133,21 @@ func (m *HostManager) Stop(id string) {
 	<-h.done
 }
 
+// Revoke writes `revoke <endpointID>` to id's daemon over its stdin repl,
+// closing the peer's live sessions. Whether the peer gets back in on its next
+// connection is the authz gate's call, so callers change policy (the DB) first
+// and then revoke.
+func (m *HostManager) Revoke(id, endpointID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	h, ok := m.hosts[id]
+	if !ok || h.stdin == nil {
+		return nil // no daemon, no live session to close
+	}
+	_, err := fmt.Fprintf(h.stdin, "revoke %s\n", endpointID)
+	return err
+}
+
 // Logs returns the recent stdout+stderr captured for id's daemon, and whether a
 // host is currently registered for id.
 func (m *HostManager) Logs(id string) (string, bool) {
@@ -166,22 +187,34 @@ func (m *HostManager) supervise(ctx context.Context, id string, h *hostProc) {
 
 func (m *HostManager) execRun(ctx context.Context, id string) error {
 	cmd := exec.CommandContext(ctx, m.opts.Bin, m.args(id)...)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("okayeg: host %s stdin: %w", id, err)
+	}
 	m.mu.Lock()
 	h := m.hosts[id]
-	m.mu.Unlock()
 	if h != nil {
+		h.stdin = stdin
 		cmd.Stdout = h.log
 		cmd.Stderr = h.log
 	}
+	m.mu.Unlock()
 	// the daemon tears its network down on a signal, so stop gracefully with
-	// SIGTERM; SIGKILL after StopGrace if it hangs. eg serve has no control
-	// socket and no interactive prompt, so there's nothing to clean up first.
+	// SIGTERM; SIGKILL after StopGrace if it hangs. The stdin repl only lists
+	// and revokes sessions, so there's nothing to clean up over it first.
 	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
 	cmd.WaitDelay = m.opts.StopGrace
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("okayeg: start host %s: %w", id, err)
 	}
-	return cmd.Wait()
+	err = cmd.Wait()
+	m.mu.Lock()
+	if h != nil && h.stdin == stdin {
+		h.stdin = nil
+	}
+	m.mu.Unlock()
+	stdin.Close()
+	return err
 }
 
 // args builds the `eg serve` argv. -C points eg at the project's share dir,

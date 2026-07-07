@@ -10,10 +10,10 @@ import (
 )
 
 // ProjectPeer is a registered browser endpoint authorized to sync a project.
-// Each browser holds its own ed identity (an okayeg EndpointId); the row records
-// which user registered it, and the .eg/trust file is the enforcement the eg
-// daemon reads. The trust file is derived state; this table is the queryable
-// record and the source it can be rebuilt from.
+// Each browser holds its own ed identity (an okayeg EndpointId); the row
+// records which user registered it. This table is what the authz command
+// consults when the peer connects, so it is the single source of truth for
+// who may sync.
 type ProjectPeer struct {
 	ID         uint   `gorm:"primaryKey"`
 	ProjectID  string `gorm:"not null;index;uniqueIndex:idx_project_endpoint"`
@@ -60,7 +60,7 @@ func (s *ProjectStore) RemovePeer(ctx context.Context, projectID, endpointID str
 }
 
 // PeersForUser returns every endpoint a user has registered on a project.
-// Used to clean up the trust file when revoking their membership.
+// Used to revoke their live sessions when removing their membership.
 func (s *ProjectStore) PeersForUser(ctx context.Context, projectID string, userID uint) ([]ProjectPeer, error) {
 	var peers []ProjectPeer
 

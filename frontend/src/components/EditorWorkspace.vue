@@ -16,6 +16,8 @@ import FileList from '@/components/FileList.vue';
 import ZoomBar from './workspace/ZoomBar.vue';
 import CompileStatus from './workspace/CompileStatus.vue';
 import Outline from './workspace/Outline.vue';
+import ReviewPanel, { type CommentDraft } from './workspace/ReviewPanel.vue';
+import type { CommentAnchor, EditorViewport } from '@/teamtype/comments';
 
 const okayeg = useOkayegStore();
 
@@ -43,6 +45,31 @@ const splitPercent = ref(55);
 const split = ref<HTMLElement>();
 const editorDrag = useSplitDrag('x', (percent) => (splitPercent.value = percent));
 
+// the left pane: project files (with the outline) or the review panel
+const sidebarTab = ref<'files' | 'review'>('files');
+// a selection waiting to become a comment; owned here so the editor (where the
+// selection happens) and the panel (where the body is written) both see it
+const draft = ref<CommentDraft | null>(null);
+// each comment anchor's document-space position and the editor's scroll
+// mapping, reported by the editor; the review panel lays its cards out
+// against these
+const anchors = ref<CommentAnchor[]>([]);
+const viewport = ref<EditorViewport | null>(null);
+const editor = ref<InstanceType<typeof TeamtypeEditor>>();
+
+// count for the review tab: unresolved threads on the file being edited
+const commentCount = computed(
+  () =>
+    okayeg.comments.filter(
+      (c) => !c.parent && c.file === okayeg.currentFile && c.fields.resolved !== true,
+    ).length,
+);
+
+function startDraft(file: string, start: number, end: number, quote: string) {
+  draft.value = { file, start, end, quote };
+  sidebarTab.value = 'review';
+}
+
 const filesPercent = ref(55);
 const sidebar = ref<HTMLElement>();
 const filesDrag = useSplitDrag('y', (percent) => (filesPercent.value = percent), 80);
@@ -67,24 +94,57 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="workspace">
-    <div ref="sidebar" class="leftbar" :style="{ '--files-basis': `${filesPercent}%` }">
-      <FileList
-        class="leftbar-files"
-        :files="okayeg.files"
-        :current-file="okayeg.currentFile"
-        :preview-file="okayeg.previewFile"
-        @select="okayeg.selectFile($event)"
-        @preview="okayeg.setPreviewFile($event)"
-      />
-      <div
-        class="divider divider-h"
-        role="separator"
-        aria-orientation="horizontal"
-        @pointerdown.prevent="startFilesDrag"
-      >
-        <span class="grip grip-h" />
+    <div
+      ref="sidebar"
+      class="leftbar"
+      :class="{ wide: sidebarTab === 'review' }"
+      :style="{ '--files-basis': `${filesPercent}%` }"
+    >
+      <div class="tabbar">
+        <button
+          class="tab label-xs"
+          :class="{ on: sidebarTab === 'files' }"
+          @click="sidebarTab = 'files'"
+        >
+          Files
+        </button>
+        <button
+          class="tab label-xs"
+          :class="{ on: sidebarTab === 'review' }"
+          @click="sidebarTab = 'review'"
+        >
+          Review
+          <span v-if="commentCount" class="tab-badge">{{ commentCount }}</span>
+        </button>
       </div>
-      <Outline class="leftbar-outline" :headings="outline" @select="jump.jumpTo($event)" />
+      <div v-if="sidebarTab === 'files'" class="leftbar-files-tab">
+        <FileList
+          class="leftbar-section"
+          :files="okayeg.files"
+          :current-file="okayeg.currentFile"
+          :preview-file="okayeg.previewFile"
+          @select="okayeg.selectFile($event)"
+          @preview="okayeg.setPreviewFile($event)"
+        />
+        <div
+          class="divider divider-h"
+          role="separator"
+          aria-orientation="horizontal"
+          @pointerdown.prevent="startFilesDrag"
+        >
+          <span class="grip grip-h" />
+        </div>
+        <Outline class="leftbar-section" :headings="outline" @select="jump.jumpTo($event)" />
+      </div>
+      <ReviewPanel
+        v-else
+        class="leftbar-review"
+        :draft="draft"
+        :anchors="anchors"
+        :viewport="viewport"
+        @draft-done="draft = null"
+        @scroll-by="editor?.scrollBy($event)"
+      />
     </div>
 
     <div ref="split" class="split" :style="{ '--editor-basis': `${splitPercent}%` }">
@@ -129,7 +189,16 @@ onBeforeUnmount(() => {
       </div>
 
       <section class="editor-pane">
-        <TeamtypeEditor class="editor" :diagnostics="diagnostics" :jump="jump" />
+        <TeamtypeEditor
+          ref="editor"
+          class="editor"
+          :diagnostics="diagnostics"
+          :jump="jump"
+          :draft="draft"
+          @draft="startDraft"
+          @anchors="anchors = $event"
+          @viewport="viewport = $event"
+        />
       </section>
 
       <section class="preview-pane">
@@ -165,21 +234,76 @@ onBeforeUnmount(() => {
   min-height: 0;
 }
 
-/* Left sidebar: files (top) and outline (bottom), vertically resizable. */
+/* Left sidebar: a Files tab (file list over outline, vertically resizable)
+   and a Review tab (comment cards tracking the source). */
 .leftbar {
   flex: none;
   width: 13rem;
   min-height: 0;
-  display: grid;
-  grid-template-rows: var(--files-basis, 55%) var(--border-thin) 1fr;
+  display: flex;
+  flex-direction: column;
   background: var(--color-bg-card);
   border-right: var(--border-thin) solid var(--color-border);
+  transition: width var(--duration-fast) var(--ease-out);
 }
 
-.leftbar-files,
-.leftbar-outline {
+.leftbar.wide {
+  width: 19rem;
+}
+
+.leftbar-files-tab {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: var(--files-basis, 55%) var(--border-thin) 1fr;
+}
+
+.leftbar-section {
   min-height: 0;
 }
+
+.leftbar-review {
+  flex: 1;
+  min-height: 0;
+}
+
+.tabbar {
+  display: flex;
+  flex: none;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-2) var(--space-1);
+  border-bottom: var(--border-thin) solid var(--color-border);
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-text-tertiary);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--color-text);
+}
+
+.tab.on {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.tab-badge {
+  padding: 0 var(--space-1);
+  font-size: 10px;
+  color: var(--color-primary);
+  background: var(--color-bg-card);
+  border-radius: var(--radius-full);
+}
+
 
 .split {
   flex: 1;
