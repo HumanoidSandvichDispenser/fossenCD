@@ -1,5 +1,20 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, markRaw, onBeforeUnmount, ref, watch } from 'vue';
+import {
+  PhArrowCounterClockwise,
+  PhBookOpen,
+  PhCaretDown,
+  PhChatsCircle,
+  PhPencilSimple,
+} from '@phosphor-icons/vue';
+import {
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuPortal,
+  DropdownMenuRoot,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from 'reka-ui';
 import { DockviewVue } from 'dockview-vue';
 import type { DockviewApi, DockviewReadyEvent, DockviewTheme, VueComponent } from 'dockview-vue';
 import 'dockview-vue/dist/styles/dockview.css';
@@ -67,6 +82,12 @@ function startDraft(file: string, start: number, end: number, quote: string) {
 type LayoutName = 'write' | 'review' | 'read';
 const LAYOUT_NAMES: LayoutName[] = ['write', 'review', 'read'];
 const LAYOUT_LABELS: Record<LayoutName, string> = { write: 'Write', review: 'Review', read: 'Read' };
+const LAYOUT_ICONS = { write: PhPencilSimple, review: PhChatsCircle, read: PhBookOpen } as const;
+const LAYOUT_HINTS: Record<LayoutName, string> = {
+  write: 'View and edit files',
+  review: 'Read and resolve comments',
+  read: 'View the rendered document',
+};
 const storedLayout = localStorage.getItem('fossencd.workspace-layout.current') as LayoutName;
 const layoutName = ref<LayoutName>(LAYOUT_NAMES.includes(storedLayout) ? storedLayout : 'write');
 watch(layoutName, (name) => {
@@ -315,6 +336,7 @@ function onReady(event: DockviewReadyEvent) {
   restoreOrBuild(event.api, layoutName.value);
 }
 
+
 watch(commentCount, () => {
   dock.value?.getPanel('review-current')?.setTitle(reviewTitle());
 });
@@ -327,26 +349,51 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="workspace">
-    <div class="workspace-bar">
-      <div class="layout-switch" role="tablist" aria-label="Workspace layout">
-        <button
-          v-for="name in LAYOUT_NAMES"
-          :key="name"
-          class="layout-tab label-xs"
-          :class="{ on: layoutName === name }"
-          role="tab"
-          :aria-selected="layoutName === name"
-          @click="switchLayout(name)"
-        >
-          {{ LAYOUT_LABELS[name] }}
-        </button>
-      </div>
-      <button class="layout-reset label-xs" title="Reset this layout to its default" @click="resetLayout">
-        Reset layout
-      </button>
-    </div>
+  <!-- the layout switcher rides in the topbar rather than a strip of its own,
+       so the modes read like Docs' editing/suggesting/viewing selector -->
+  <Teleport to="#workspace-actions">
+    <DropdownMenuRoot>
+      <DropdownMenuTrigger
+        class="layout-trigger label-sm btn btn-sm btn-secondary"
+        aria-label="Workspace layout"
+      >
+        <component :is="LAYOUT_ICONS[layoutName]" :size="14" />
+        {{ LAYOUT_LABELS[layoutName] }}
+        <PhCaretDown :size="12" />
+      </DropdownMenuTrigger>
+      <DropdownMenuPortal>
+        <DropdownMenuContent class="layout-list" align="end" :side-offset="4">
+          <DropdownMenuItem
+            v-for="name in LAYOUT_NAMES"
+            :key="name"
+            class="layout-option"
+            :data-current="layoutName === name || undefined"
+            @select="switchLayout(name)"
+          >
+            <span class="layout-icon">
+              <component :is="LAYOUT_ICONS[name]" :size="16" />
+            </span>
+            <span class="layout-text">
+              <span class="layout-name label-sm">{{ LAYOUT_LABELS[name] }}</span>
+              <span class="layout-hint text-xs">{{ LAYOUT_HINTS[name] }}</span>
+            </span>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator class="layout-divider" />
+          <DropdownMenuItem class="layout-option" @select="resetLayout">
+            <span class="layout-icon">
+              <PhArrowCounterClockwise :size="16" />
+            </span>
+            <span class="layout-text">
+              <span class="layout-name label-sm">Reset layout</span>
+              <span class="layout-hint text-xs">Back to this layout's default</span>
+            </span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenuPortal>
+    </DropdownMenuRoot>
+  </Teleport>
 
+  <div class="workspace">
     <DockviewVue class="dock" :components="panelComponents" :theme="theme" @ready="onReady" />
   </div>
 </template>
@@ -359,51 +406,70 @@ onBeforeUnmount(() => {
   min-height: 0;
 }
 
-.workspace-bar {
-  display: flex;
+/* the trigger teleports into the topbar; scoped styles still reach it there */
+.layout-trigger {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  flex: none;
-  padding: var(--space-1) var(--space-2);
-  background: var(--color-bg-card);
-  border-bottom: var(--border-thin) solid var(--color-border);
-}
-
-.layout-switch {
-  display: flex;
   gap: var(--space-1);
 }
 
-.layout-tab {
-  padding: var(--space-1) var(--space-2);
-  color: var(--color-text-tertiary);
-  background: none;
-  border: none;
+:deep(.layout-list) {
+  z-index: var(--z-dropdown);
+  min-width: var(--width-xs);
+  padding: var(--space-1);
+  background: var(--color-bg-card);
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+:deep(.layout-option) {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  color: var(--color-text-secondary);
   border-radius: var(--radius-sm);
   cursor: pointer;
+  outline: none;
 }
 
-.layout-tab:hover {
+:deep(.layout-option[data-highlighted]) {
   color: var(--color-text);
+  background: var(--color-surface-hover);
 }
 
-.layout-tab.on {
-  background: var(--color-primary-light);
+:deep(.layout-option[data-current]) {
   color: var(--color-primary);
 }
 
-.layout-reset {
-  padding: var(--space-1) var(--space-2);
-  color: var(--color-text-tertiary);
-  background: none;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
+:deep(.layout-option[data-current] .layout-hint) {
+  color: var(--color-primary);
 }
 
-.layout-reset:hover {
-  color: var(--color-text);
-  background: var(--color-surface-hover);
+:deep(.layout-icon) {
+  display: inline-flex;
+  flex: none;
+}
+
+:deep(.layout-text) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+:deep(.layout-hint) {
+  color: var(--color-text-tertiary);
+}
+
+:deep(.layout-divider) {
+  height: 1px;
+  margin: var(--space-1) 0;
+  background: var(--color-border-light);
+}
+
+:deep(span.layout-hint, span.layout-name) {
+  line-height: 1;
 }
 
 .dock {

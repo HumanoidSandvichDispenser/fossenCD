@@ -318,6 +318,7 @@ p {
   --border-strong: 2px;
 
   /* Layout widths — max-width of centered content, not spacing. */
+  --width-xs: 16rem; /* small cards, narrow panels */
   --width-form: 22rem; /* auth cards, single-column forms, dialogs */
   --width-narrow: 32rem; /* compact panels */
   --width-content: 48rem; /* readable column / centered page content */

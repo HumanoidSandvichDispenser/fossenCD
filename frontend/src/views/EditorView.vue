@@ -133,6 +133,9 @@ onBeforeUnmount(() => {
         </template>
       </div>
 
+      <!-- the workspace teleports its layout switcher here once connected -->
+      <div id="workspace-actions" class="workspace-actions"></div>
+
       <button class="label-sm btn btn-sm btn-secondary" @click="showLogs = true">
         Logs
       </button>
@@ -220,6 +223,12 @@ onBeforeUnmount(() => {
 
 .spacer {
   flex: 1;
+}
+
+/* the teleported switcher joins the topbar's flex row directly, and an empty
+   holder claims no gap slot */
+.workspace-actions {
+  display: contents;
 }
 
 /* Connection status chips */
