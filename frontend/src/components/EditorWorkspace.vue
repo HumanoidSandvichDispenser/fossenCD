@@ -64,9 +64,9 @@ function startDraft(file: string, start: number, end: number, quote: string) {
 // rearrangements separately, so switching back restores the dock as it was
 // left, and a layout the user has never touched is built from its default.
 
-type LayoutName = 'write' | 'review';
-const LAYOUT_NAMES: LayoutName[] = ['write', 'review'];
-const LAYOUT_LABELS: Record<LayoutName, string> = { write: 'Write', review: 'Review' };
+type LayoutName = 'write' | 'review' | 'read';
+const LAYOUT_NAMES: LayoutName[] = ['write', 'review', 'read'];
+const LAYOUT_LABELS: Record<LayoutName, string> = { write: 'Write', review: 'Review', read: 'Read' };
 const storedLayout = localStorage.getItem('fossencd.workspace-layout.current') as LayoutName;
 const layoutName = ref<LayoutName>(LAYOUT_NAMES.includes(storedLayout) ? storedLayout : 'write');
 watch(layoutName, (name) => {
@@ -151,13 +151,59 @@ function reviewTitle() {
   return commentCount.value ? `Review (${commentCount.value})` : 'Review';
 }
 
-// The default arrangement for each named layout. Both share the same shape
-// (left column of tabs over the outline; editor in the middle; a right group
-// holding the preview and the current file's review threads). Writing leads
-// with the file tree and the preview; reviewing leads with the all-comments
-// list and swaps the thread pane in front of the preview.
+// The default arrangement for each named layout. Write and review share the
+// same shape (left column of tabs over the outline; editor in the middle; a
+// right group holding the preview and the current file's review threads).
+// Writing leads with the file tree and the preview; reviewing leads with the
+// all-comments list and swaps the thread pane in front of the preview. Reading
+// gives the rendered document the whole center, with the outline for
+// navigation and everything else stacked behind.
 function buildLayout(api: DockviewApi, name: LayoutName) {
   api.clear();
+
+  if (name === 'read') {
+    api.addPanel({ id: 'preview', component: 'preview', title: 'Preview' });
+    // the editor keeps its DOM alive behind the preview so scroll and
+    // selection survive a dip back into the source
+    api.addPanel({
+      id: 'editor',
+      component: 'editor',
+      title: 'Editor',
+      renderer: 'always',
+      position: { referencePanel: 'preview', direction: 'within' },
+      inactive: true,
+    });
+    api.addPanel({
+      id: 'review-current',
+      component: 'review-current',
+      title: reviewTitle(),
+      position: { referencePanel: 'preview', direction: 'within' },
+      inactive: true,
+    });
+    api.addPanel({
+      id: 'outline',
+      component: 'outline',
+      title: 'Outline',
+      position: { referencePanel: 'preview', direction: 'left' },
+      initialWidth: 240,
+    });
+    api.addPanel({
+      id: 'files',
+      component: 'files',
+      title: 'Files',
+      position: { referencePanel: 'outline', direction: 'within' },
+      inactive: true,
+    });
+    api.addPanel({
+      id: 'review-all',
+      component: 'review-all',
+      title: 'Comments',
+      position: { referencePanel: 'outline', direction: 'within' },
+      inactive: true,
+    });
+    api.getPanel('preview')?.api.setActive();
+    return;
+  }
 
   api.addPanel({
     id: 'editor',
