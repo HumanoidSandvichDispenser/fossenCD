@@ -215,7 +215,16 @@ function pushDiagnostics() {
 }
 
 onMounted(() => {
-  view = new EditorView({ state: makeState(okayeg.currentFile, ''), parent: host.value });
+  // seed from the store: the editor can mount with a file already open (the
+  // workspace rebuilds its panels on layout changes), so waiting for the next
+  // snapshot or file switch would leave the buffer empty
+  const file = okayeg.currentFile;
+  view = new EditorView({
+    state: makeState(file, (file && okayeg.read(file)) ?? ''),
+    parent: host.value,
+  });
+  pushDiagnostics();
+  pushComments();
 
   // scrolling only shifts the document-to-screen mapping, not the anchors
   // themselves; the scroller element survives setState, so one listener

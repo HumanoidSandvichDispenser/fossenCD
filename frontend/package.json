@@ -30,6 +30,7 @@
     "@phosphor-icons/vue": "^2.2.1",
     "@sandvichxyz/okayeg-wasm": "0.1.0-1",
     "codemirror-lang-typst": "^0.4.0",
+    "dockview-vue": "^7.0.2",
     "pinia": "^3.0.4",
     "reka-ui": "^2.10.0",
     "vue": "^3.5.32",

@@ -17,6 +17,7 @@
         "@phosphor-icons/vue": "^2.2.1",
         "@sandvichxyz/okayeg-wasm": "0.1.0-1",
         "codemirror-lang-typst": "^0.4.0",
+        "dockview-vue": "^7.0.2",
         "pinia": "^3.0.4",
         "reka-ui": "^2.10.0",
         "vue": "^3.5.32",
@@ -586,6 +587,12 @@
     "destr": ["destr@2.0.5", "", {}, "sha512-ugFTXCtDZunbzasqBxrK93Ik/DRYsO6S/fedkWEMKqt04xZ4csmnmwGDBAb07QWNaGMAmnTIemsYZCksjATwsA=="],
 
     "detect-libc": ["detect-libc@2.1.2", "", {}, "sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ=="],
+
+    "dockview": ["dockview@7.0.2", "", { "dependencies": { "dockview-core": "^7.0.2" } }, "sha512-QhgbJ7RTFsWvrs1lQZKPGCLTGjKU7kI5ZWX5lwU03arM9lIoQlbfv1b/uQ7V5zTkRw7JDndEqjKMgEFw2I8Kow=="],
+
+    "dockview-core": ["dockview-core@7.0.2", "", {}, "sha512-i666ndkUdT4U+Bo2Yu3d6KwCJNqe21VJ0oschdgcXucZ5TquzBFX94zcUBEfg4IewTv2BuiPJ7r/2JTGLLv6ig=="],
+
+    "dockview-vue": ["dockview-vue@7.0.2", "", { "dependencies": { "dockview": "^7.0.2" }, "peerDependencies": { "vue": "^3.4.0" } }, "sha512-O1ta/OhISPSu6sF1VQBWdDLyRbmJC0I2onixqXH/ZSSk8/t9OUsB9X9VuXP3g3D+a3THI3eRJEJyDazTAxEF8g=="],
 
     "dotenv": ["dotenv@17.4.2", "", {}, "sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw=="],
 

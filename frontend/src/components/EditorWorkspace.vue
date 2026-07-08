@@ -1,35 +1,28 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue';
-import { PhFilePdf } from '@phosphor-icons/vue';
+import { computed, defineComponent, h, markRaw, onBeforeUnmount, ref, watch } from 'vue';
+import { DockviewVue } from 'dockview-vue';
+import type { DockviewApi, DockviewReadyEvent, DockviewTheme, VueComponent } from 'dockview-vue';
+import 'dockview-vue/dist/styles/dockview.css';
 
 import { useOkayegStore } from '@/stores/okayeg';
 import { useZoom } from '@/composables/useZoom';
 import { useCompileStatus } from '@/composables/useCompileStatus';
 import { useDiagnostics } from '@/composables/useDiagnostics';
-import { useExportPdf } from '@/composables/useExportPdf';
 import { useEditorJump } from '@/composables/useEditorJump';
-import { useSplitDrag } from '@/composables/useSplitDrag';
 import { parseOutline } from '@/teamtype/outline';
 import TeamtypeEditor from '@/components/TeamtypeEditor.vue';
-import TypstPreview from '@/components/TypstPreview.vue';
 import FileList from '@/components/FileList.vue';
-import ZoomBar from './workspace/ZoomBar.vue';
-import CompileStatus from './workspace/CompileStatus.vue';
 import Outline from './workspace/Outline.vue';
+import PreviewPane from './workspace/PreviewPane.vue';
 import ReviewPanel, { type CommentDraft } from './workspace/ReviewPanel.vue';
 import type { CommentAnchor, EditorViewport } from '@/teamtype/comments';
 
 const okayeg = useOkayegStore();
 
-// Typst rendering only makes sense for .typ files; the preview tracks the
-// chosen build target
-const isTypst = computed(() => okayeg.previewFile?.toLowerCase().endsWith('.typ') ?? false);
-
 const zoomState = useZoom();
 const compileStatus = useCompileStatus();
 const diagnostics = useDiagnostics();
 const jump = useEditorJump();
-const { exporting: pdfExporting, error: pdfError, exportPdf } = useExportPdf();
 
 // outline of the file being edited, derived from its source markup; recomputes
 // reactively as the file's content (in the VFS) or the selection changes
@@ -39,14 +32,6 @@ const outline = computed(() => {
   return text ? parseOutline(text) : [];
 });
 
-// editor pane width as a % of the split grid; files pane height as a % of the
-// left sidebar. Both resolve a grid track basis.
-const splitPercent = ref(55);
-const split = ref<HTMLElement>();
-const editorDrag = useSplitDrag('x', (percent) => (splitPercent.value = percent));
-
-// the left pane: project files (with the outline) or the review panel
-const sidebarTab = ref<'files' | 'review'>('files');
 // a selection waiting to become a comment; owned here so the editor (where the
 // selection happens) and the panel (where the body is written) both see it
 const draft = ref<CommentDraft | null>(null);
@@ -57,7 +42,7 @@ const anchors = ref<CommentAnchor[]>([]);
 const viewport = ref<EditorViewport | null>(null);
 const editor = ref<InstanceType<typeof TeamtypeEditor>>();
 
-// count for the review tab: unresolved threads on the file being edited
+// count for the review tab title: unresolved threads on the file being edited
 const commentCount = computed(
   () =>
     okayeg.comments.filter(
@@ -67,218 +52,253 @@ const commentCount = computed(
 
 function startDraft(file: string, start: number, end: number, quote: string) {
   draft.value = { file, start, end, quote };
-  sidebarTab.value = 'review';
+  dock.value?.getPanel('review')?.api.setActive();
 }
 
-const filesPercent = ref(55);
-const sidebar = ref<HTMLElement>();
-const filesDrag = useSplitDrag('y', (percent) => (filesPercent.value = percent), 80);
+// --- dockview layouts -------------------------------------------------------
+//
+// The workspace is a dockview dock. Panels are the workspace's fixed cast
+// (files, outline, review, editor, preview); a layout is where they sit. Named
+// layouts capture a workflow: writing wants the file tree at hand, reviewing
+// puts the comment thread list first. Each layout persists the user's
+// rearrangements separately, so switching back restores the dock as it was
+// left, and a layout the user has never touched is built from its default.
 
-function startEditorDrag() {
-  if (split.value) {
-    editorDrag.start(split.value);
+type LayoutName = 'write' | 'review';
+const LAYOUT_NAMES: LayoutName[] = ['write', 'review'];
+const LAYOUT_LABELS: Record<LayoutName, string> = { write: 'Write', review: 'Review' };
+const storedLayout = localStorage.getItem('fossencd.workspace-layout.current') as LayoutName;
+const layoutName = ref<LayoutName>(LAYOUT_NAMES.includes(storedLayout) ? storedLayout : 'write');
+watch(layoutName, (name) => {
+  localStorage.setItem('fossencd.workspace-layout.current', name);
+});
+const dock = ref<DockviewApi>();
+
+// dockview looks panels up by name in this map. Each entry closes over the
+// workspace's state, so the panels stay wired to the shared refs without any
+// params plumbing; inheritAttrs off keeps dockview's injected props (params,
+// api) from leaking onto the panel roots as DOM attributes.
+function panel(render: () => ReturnType<typeof h>): VueComponent {
+  return defineComponent({ inheritAttrs: false, setup: () => render }) as unknown as VueComponent;
+}
+
+const panelComponents = markRaw({
+  files: panel(() =>
+    h(FileList, {
+      class: 'panel-fill',
+      files: okayeg.files,
+      currentFile: okayeg.currentFile,
+      previewFile: okayeg.previewFile,
+      onSelect: (f: string) => okayeg.selectFile(f),
+      onPreview: (f: string) => okayeg.setPreviewFile(f),
+    }),
+  ),
+  outline: panel(() =>
+    h(Outline, {
+      class: 'panel-fill',
+      headings: outline.value,
+      onSelect: (pos: number) => jump.jumpTo(pos),
+    }),
+  ),
+  review: panel(() =>
+    h(ReviewPanel, {
+      class: 'panel-fill',
+      draft: draft.value,
+      anchors: anchors.value,
+      viewport: viewport.value,
+      onDraftDone: () => (draft.value = null),
+      onScrollBy: (px: number) => editor.value?.scrollBy(px),
+    }),
+  ),
+  editor: panel(() =>
+    h(TeamtypeEditor, {
+      ref: editor,
+      class: 'panel-fill',
+      diagnostics,
+      jump,
+      draft: draft.value,
+      onDraft: startDraft,
+      onAnchors: (a: CommentAnchor[]) => (anchors.value = a),
+      onViewport: (v: EditorViewport) => (viewport.value = v),
+    }),
+  ),
+  preview: panel(() => h(PreviewPane, { zoomState, compileStatus, diagnostics })),
+});
+
+const theme: DockviewTheme = {
+  name: 'fossencd',
+  // stack on the built-in light theme so every variable has a value; the
+  // fossencd class overrides the ones our tokens care about
+  className: 'dockview-theme-light dockview-theme-fossencd',
+  colorScheme: 'light',
+};
+
+function storageKey(name: LayoutName) {
+  return `fossencd.workspace-layout.${name}`;
+}
+
+function reviewTitle() {
+  return commentCount.value ? `Review (${commentCount.value})` : 'Review';
+}
+
+// The default arrangement for each named layout. Both share the same shape
+// (left column: tabbed files/review over the outline; editor and preview side
+// by side); they differ in which left tab leads and how much room it gets.
+function buildLayout(api: DockviewApi, name: LayoutName) {
+  api.clear();
+
+  api.addPanel({
+    id: 'editor',
+    component: 'editor',
+    title: 'Editor',
+    // keep CodeMirror's DOM alive when the panel is hidden so editor state
+    // (scroll, selection) survives the user stacking it behind another tab
+    renderer: 'always',
+  });
+  api.addPanel({
+    id: 'preview',
+    component: 'preview',
+    title: 'Preview',
+    position: { referencePanel: 'editor', direction: 'right' },
+  });
+
+  const first = name === 'review' ? 'review' : 'files';
+  const second = name === 'review' ? 'files' : 'review';
+  const leftWidth = name === 'review' ? 304 : 208;
+
+  api.addPanel({
+    id: first,
+    component: first,
+    title: first === 'review' ? reviewTitle() : 'Files',
+    position: { referencePanel: 'editor', direction: 'left' },
+    initialWidth: leftWidth,
+  });
+  api.addPanel({
+    id: second,
+    component: second,
+    title: second === 'review' ? reviewTitle() : 'Files',
+    position: { referencePanel: first, direction: 'within' },
+    inactive: true,
+  });
+  api.addPanel({
+    id: 'outline',
+    component: 'outline',
+    title: 'Outline',
+    position: { referencePanel: first, direction: 'below' },
+    inactive: true,
+    initialHeight: 260,
+  });
+
+  api.getPanel('editor')?.api.setActive();
+}
+
+function restoreOrBuild(api: DockviewApi, name: LayoutName) {
+  const saved = localStorage.getItem(storageKey(name));
+  if (saved) {
+    try {
+      api.fromJSON(JSON.parse(saved));
+      // the serialized layout carries the review title from when it was saved
+      api.getPanel('review')?.setTitle(reviewTitle());
+      return;
+    } catch {
+      localStorage.removeItem(storageKey(name));
+    }
+  }
+  buildLayout(api, name);
+}
+
+function saveLayout(api: DockviewApi, name: LayoutName) {
+  try {
+    localStorage.setItem(storageKey(name), JSON.stringify(api.toJSON()));
+  } catch {
+    // a full or unavailable storage only costs persistence
   }
 }
 
-function startFilesDrag() {
-  if (sidebar.value) {
-    filesDrag.start(sidebar.value);
+function switchLayout(name: LayoutName) {
+  const api = dock.value;
+  if (!api || name === layoutName.value) {
+    return;
   }
+  saveLayout(api, layoutName.value);
+  layoutName.value = name;
+  restoreOrBuild(api, name);
 }
+
+function resetLayout() {
+  const api = dock.value;
+  if (!api) {
+    return;
+  }
+  localStorage.removeItem(storageKey(layoutName.value));
+  buildLayout(api, layoutName.value);
+}
+
+function onReady(event: DockviewReadyEvent) {
+  dock.value = event.api;
+  restoreOrBuild(event.api, layoutName.value);
+}
+
+watch(commentCount, () => {
+  dock.value?.getPanel('review')?.setTitle(reviewTitle());
+});
 
 onBeforeUnmount(() => {
-  editorDrag.stop();
-  filesDrag.stop();
+  if (dock.value) {
+    saveLayout(dock.value, layoutName.value);
+  }
 });
 </script>
 
 <template>
   <div class="workspace">
-    <div
-      ref="sidebar"
-      class="leftbar"
-      :class="{ wide: sidebarTab === 'review' }"
-      :style="{ '--files-basis': `${filesPercent}%` }"
-    >
-      <div class="tabbar">
+    <div class="workspace-bar">
+      <div class="layout-switch" role="tablist" aria-label="Workspace layout">
         <button
-          class="tab label-xs"
-          :class="{ on: sidebarTab === 'files' }"
-          @click="sidebarTab = 'files'"
+          v-for="name in LAYOUT_NAMES"
+          :key="name"
+          class="layout-tab label-xs"
+          :class="{ on: layoutName === name }"
+          role="tab"
+          :aria-selected="layoutName === name"
+          @click="switchLayout(name)"
         >
-          Files
-        </button>
-        <button
-          class="tab label-xs"
-          :class="{ on: sidebarTab === 'review' }"
-          @click="sidebarTab = 'review'"
-        >
-          Review
-          <span v-if="commentCount" class="tab-badge">{{ commentCount }}</span>
+          {{ LAYOUT_LABELS[name] }}
         </button>
       </div>
-      <div v-if="sidebarTab === 'files'" class="leftbar-files-tab">
-        <FileList
-          class="leftbar-section"
-          :files="okayeg.files"
-          :current-file="okayeg.currentFile"
-          :preview-file="okayeg.previewFile"
-          @select="okayeg.selectFile($event)"
-          @preview="okayeg.setPreviewFile($event)"
-        />
-        <div
-          class="divider divider-h"
-          role="separator"
-          aria-orientation="horizontal"
-          @pointerdown.prevent="startFilesDrag"
-        >
-          <span class="grip grip-h" />
-        </div>
-        <Outline class="leftbar-section" :headings="outline" @select="jump.jumpTo($event)" />
-      </div>
-      <ReviewPanel
-        v-else
-        class="leftbar-review"
-        :draft="draft"
-        :anchors="anchors"
-        :viewport="viewport"
-        @draft-done="draft = null"
-        @scroll-by="editor?.scrollBy($event)"
-      />
+      <button class="layout-reset label-xs" title="Reset this layout to its default" @click="resetLayout">
+        Reset layout
+      </button>
     </div>
 
-    <div ref="split" class="split" :style="{ '--editor-basis': `${splitPercent}%` }">
-      <div class="toolbar toolbar-editor">
-        <div class="toolbar-group">
-          <!-- start: editor actions (formatting, etc.) -->
-        </div>
-        <div class="toolbar-group">
-          <!-- middle -->
-        </div>
-        <div class="toolbar-group">
-          <!-- end -->
-        </div>
-      </div>
-
-      <div class="toolbar toolbar-preview">
-        <div class="toolbar-group">
-          <!-- start: preview controls -->
-          <ZoomBar :zoomState="zoomState" />
-        </div>
-        <div class="toolbar-group">
-          <!-- middle -->
-        </div>
-        <div class="toolbar-group">
-          <!-- end -->
-          <CompileStatus :status="compileStatus" />
-          <button
-            v-if="isTypst && okayeg.previewFile"
-            class="label-sm btn btn-sm btn-secondary"
-            :disabled="pdfExporting"
-            :title="pdfError ?? 'Export the preview as PDF'"
-            @click="okayeg.previewFile && exportPdf(okayeg.previewFile, okayeg.vfs)"
-          >
-            <PhFilePdf :size="14" />
-            {{ pdfExporting ? 'Exporting…' : 'Export PDF' }}
-          </button>
-        </div>
-      </div>
-
-      <div class="divider" role="separator" aria-orientation="vertical" @pointerdown.prevent="startEditorDrag">
-        <span class="grip" />
-      </div>
-
-      <section class="editor-pane">
-        <TeamtypeEditor
-          ref="editor"
-          class="editor"
-          :diagnostics="diagnostics"
-          :jump="jump"
-          :draft="draft"
-          @draft="startDraft"
-          @anchors="anchors = $event"
-          @viewport="viewport = $event"
-        />
-      </section>
-
-      <section class="preview-pane">
-        <!-- unsure what pattern to use once we have multiple preview types -->
-        <TypstPreview
-          v-if="isTypst && okayeg.previewFile"
-          :main-file="okayeg.previewFile"
-          :vfs="okayeg.vfs"
-          :zoom="zoomState.zoom.value"
-          :compile-status="compileStatus"
-          :diagnostics="diagnostics"
-        />
-        <div v-else class="preview-placeholder">
-          <span class="preview-title serif-lg">Preview</span>
-          <span class="preview-sub text-sm">
-            <template v-if="okayeg.previewFile">
-              Preview is currently not available for <code>{{ okayeg.previewFile }}</code>.
-            </template>
-            <template v-else>
-              Select a file to preview.
-            </template>
-          </span>
-        </div>
-      </section>
-    </div>
+    <DockviewVue class="dock" :components="panelComponents" :theme="theme" @ready="onReady" />
   </div>
 </template>
 
 <style scoped>
 .workspace {
   display: flex;
-  flex: 1;
-  min-height: 0;
-}
-
-/* Left sidebar: a Files tab (file list over outline, vertically resizable)
-   and a Review tab (comment cards tracking the source). */
-.leftbar {
-  flex: none;
-  width: 13rem;
-  min-height: 0;
-  display: flex;
   flex-direction: column;
-  background: var(--color-bg-card);
-  border-right: var(--border-thin) solid var(--color-border);
-  transition: width var(--duration-fast) var(--ease-out);
-}
-
-.leftbar.wide {
-  width: 19rem;
-}
-
-.leftbar-files-tab {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-rows: var(--files-basis, 55%) var(--border-thin) 1fr;
-}
-
-.leftbar-section {
-  min-height: 0;
-}
-
-.leftbar-review {
   flex: 1;
   min-height: 0;
 }
 
-.tabbar {
+.workspace-bar {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   flex: none;
-  gap: var(--space-1);
-  padding: var(--space-2) var(--space-2) var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-bg-card);
   border-bottom: var(--border-thin) solid var(--color-border);
 }
 
-.tab {
-  display: inline-flex;
-  align-items: center;
+.layout-switch {
+  display: flex;
   gap: var(--space-1);
+}
+
+.layout-tab {
   padding: var(--space-1) var(--space-2);
   color: var(--color-text-tertiary);
   background: none;
@@ -287,146 +307,75 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 
-.tab:hover {
+.layout-tab:hover {
   color: var(--color-text);
 }
 
-.tab.on {
+.layout-tab.on {
   background: var(--color-primary-light);
   color: var(--color-primary);
 }
 
-.tab-badge {
-  padding: 0 var(--space-1);
-  font-size: 10px;
-  color: var(--color-primary);
-  background: var(--color-bg-card);
-  border-radius: var(--radius-full);
-}
-
-
-.split {
-  flex: 1;
-  min-width: 0;
-  display: grid;
-  grid-template-columns: var(--editor-basis, 55%) var(--border-thin) 1fr;
-  grid-template-rows: auto 1fr;
-  grid-template-areas:
-    'editor-tools editor-tools preview-tools'
-    'editor       divider      preview';
-}
-
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 2.5rem;
-  padding: var(--space-1) var(--space-3);
-  background: var(--color-bg-card);
-  border-bottom: var(--border-thin) solid var(--color-border);
-}
-
-.toolbar-editor {
-  grid-area: editor-tools;
-  justify-content: space-between;
-}
-
-.toolbar-preview {
-  grid-area: preview-tools;
-  justify-content: space-between;
-}
-
-.toolbar-group {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.editor-pane {
-  grid-area: editor;
-  min-width: 0;
-  min-height: 0;
-  background: var(--color-bg-card);
-  overflow: hidden;
-}
-
-.editor {
-  height: 100%;
-}
-
-.divider {
-  grid-area: divider;
-  position: relative;
-  background: var(--color-border);
-  cursor: col-resize;
-}
-
-.divider::before {
-  /* Widen the hit target without shifting layout. */
-  content: '';
-  position: absolute;
-  inset: 0 -4px;
-}
-
-.divider:hover,
-.divider:active {
-  background: var(--color-accent-400);
-}
-
-.grip {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 4px;
-  height: 28px;
-  transform: translate(-50%, -50%);
-  border-radius: var(--radius-full);
-  background: var(--color-neutral-300);
-}
-
-.divider:hover .grip {
-  background: var(--color-accent-400);
-}
-
-.divider-h {
-  grid-area: auto;
-  cursor: row-resize;
-}
-
-.divider-h::before {
-  inset: -4px 0;
-}
-
-.grip-h {
-  width: 28px;
-  height: 4px;
-}
-
-/* Preview pane */
-.preview-pane {
-  grid-area: preview;
-  min-width: 0;
-  min-height: 0;
-  overflow: auto;
-  background: var(--color-bg-page);
-}
-
-.preview-placeholder {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-1);
-  text-align: center;
-  padding: var(--space-8);
-}
-
-.preview-title {
-  color: var(--color-text-secondary);
-}
-
-.preview-sub {
+.layout-reset {
+  padding: var(--space-1) var(--space-2);
   color: var(--color-text-tertiary);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.layout-reset:hover {
+  color: var(--color-text);
+  background: var(--color-surface-hover);
+}
+
+.dock {
+  flex: 1;
+  min-height: 0;
+}
+</style>
+
+<style>
+.panel-fill {
+  height: 100%;
+}
+
+.dockview-theme-fossencd {
+  --dv-group-view-background-color: var(--color-bg-card);
+  --dv-tabs-and-actions-container-background-color: var(--color-neutral-100);
+  /*--dv-tabs-and-actions-container-height: 32px;*/
+  --dv-tabs-and-actions-container-font-size: var(--label-sm);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--color-bg-card);
+  --dv-activegroup-visiblepanel-tab-color: var(--color-text);
+  --dv-activegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-activegroup-hiddenpanel-tab-color: var(--color-text-tertiary);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--color-bg-card);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--color-text-secondary);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--color-text-tertiary);
+  --dv-tab-divider-color: transparent;
+  --dv-separator-border: var(--color-border);
+  --dv-tab-border-radius: var(--radius-sm);
+  --dv-tab-margin: 0;
+  --dv-sash-color: transparent;
+  --dv-active-sash-color: var(--color-accent-400);
+  --dv-paneview-active-outline-color: var(--color-primary);
+  --dv-drag-over-background-color: var(--color-primary-light);
+  --dv-tabs-container-scrollbar-color: var(--color-neutral-300);
+}
+
+/* only the built-in "spaced" themes consume --dv-tab-border-radius, and tab
+   padding is hardcoded upstream, so both need explicit rules here */
+.dockview-theme-fossencd .dv-tab {
+  /* attached cards: flush with the panel below, rounded on top only */
+  border-radius: var(--dv-tab-border-radius) var(--dv-tab-border-radius) 0 0;
+  padding: var(--space-1) var(--space-4);
+}
+
+/* the workspace panels are fixtures; closing one would strand it until a
+   layout reset, so hide the per-tab close button */
+.dockview-theme-fossencd .dv-tab .dv-default-tab .dv-default-tab-action {
+  display: none;
 }
 </style>

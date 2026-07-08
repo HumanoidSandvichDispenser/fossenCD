@@ -93,6 +93,15 @@
   --font-ui: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-serif: 'Source Serif 4', Georgia, 'Times New Roman', serif;
   --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
+
+  /* Font sizes; each token backs the class of the same name */
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-lg: 15px;
+  --label-xs: 11px;
+  --label-sm: 12px;
+  --label-md: 14px;
 }
 
 /* UI Display */
@@ -134,34 +143,34 @@ h6,
 /* UI Body */
 body,
 p {
-  font: 400 14px var(--font-ui);
+  font: 400 var(--text-md) var(--font-ui);
   line-height: 1.5;
   color: var(--color-text);
 }
 .text-lg {
-  font: 400 15px var(--font-ui);
+  font: 400 var(--text-lg) var(--font-ui);
   line-height: 1.55;
 }
 .text-sm {
-  font: 400 13px var(--font-ui);
+  font: 400 var(--text-sm) var(--font-ui);
   line-height: 1.5;
 }
 .text-xs {
-  font: 400 12px var(--font-ui);
+  font: 400 var(--text-xs) var(--font-ui);
   line-height: 1.45;
 }
 
 /* UI Labels (buttons, inputs) */
 .label-md {
-  font: 500 14px var(--font-ui);
+  font: 500 var(--label-md) var(--font-ui);
   line-height: 1.4;
 }
 .label-sm {
-  font: 500 12px var(--font-ui);
+  font: 500 var(--label-sm) var(--font-ui);
   line-height: 1.4;
 }
 .label-xs {
-  font: 500 11px var(--font-ui);
+  font: 500 var(--label-xs) var(--font-ui);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   line-height: 1.35;
