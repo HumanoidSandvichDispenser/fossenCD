@@ -36,8 +36,8 @@ const outline = computed(() => {
 // selection happens) and the panel (where the body is written) both see it
 const draft = ref<CommentDraft | null>(null);
 // each comment anchor's document-space position and the editor's scroll
-// mapping, reported by the editor; the review panel lays its cards out
-// against these
+// mapping, reported by the editor; the current-file review pane hangs its
+// cards against these
 const anchors = ref<CommentAnchor[]>([]);
 const viewport = ref<EditorViewport | null>(null);
 const editor = ref<InstanceType<typeof TeamtypeEditor>>();
@@ -52,7 +52,7 @@ const commentCount = computed(
 
 function startDraft(file: string, start: number, end: number, quote: string) {
   draft.value = { file, start, end, quote };
-  dock.value?.getPanel('review')?.api.setActive();
+  dock.value?.getPanel('review-current')?.api.setActive();
 }
 
 // --- dockview layouts -------------------------------------------------------
@@ -100,14 +100,24 @@ const panelComponents = markRaw({
       onSelect: (pos: number) => jump.jumpTo(pos),
     }),
   ),
-  review: panel(() =>
+  'review-current': panel(() =>
     h(ReviewPanel, {
       class: 'panel-fill',
+      scope: 'file',
       draft: draft.value,
       anchors: anchors.value,
       viewport: viewport.value,
       onDraftDone: () => (draft.value = null),
       onScrollBy: (px: number) => editor.value?.scrollBy(px),
+    }),
+  ),
+  'review-all': panel(() =>
+    h(ReviewPanel, {
+      class: 'panel-fill',
+      scope: 'all',
+      draft: null,
+      anchors: [],
+      viewport: null,
     }),
   ),
   editor: panel(() =>
@@ -142,8 +152,10 @@ function reviewTitle() {
 }
 
 // The default arrangement for each named layout. Both share the same shape
-// (left column: tabbed files/review over the outline; editor and preview side
-// by side); they differ in which left tab leads and how much room it gets.
+// (left column of tabs over the outline; editor in the middle; a right group
+// holding the preview and the current file's review threads). Writing leads
+// with the file tree and the preview; reviewing leads with the all-comments
+// list and swaps the thread pane in front of the preview.
 function buildLayout(api: DockviewApi, name: LayoutName) {
   api.clear();
 
@@ -155,36 +167,49 @@ function buildLayout(api: DockviewApi, name: LayoutName) {
     // (scroll, selection) survives the user stacking it behind another tab
     renderer: 'always',
   });
+
+  const reviewing = name === 'review';
+
+  // right group: review-current and preview tabbed together, the layout's
+  // focus first
+  const rightFirst = reviewing ? 'review-current' : 'preview';
+  const rightSecond = reviewing ? 'preview' : 'review-current';
   api.addPanel({
-    id: 'preview',
-    component: 'preview',
-    title: 'Preview',
+    id: rightFirst,
+    component: rightFirst,
+    title: rightFirst === 'review-current' ? reviewTitle() : 'Preview',
     position: { referencePanel: 'editor', direction: 'right' },
   });
-
-  const first = name === 'review' ? 'review' : 'files';
-  const second = name === 'review' ? 'files' : 'review';
-  const leftWidth = name === 'review' ? 304 : 208;
-
   api.addPanel({
-    id: first,
-    component: first,
-    title: first === 'review' ? reviewTitle() : 'Files',
+    id: rightSecond,
+    component: rightSecond,
+    title: rightSecond === 'review-current' ? reviewTitle() : 'Preview',
+    position: { referencePanel: rightFirst, direction: 'within' },
+    inactive: true,
+  });
+
+  // left group: file tree and the cross-file comment list
+  const leftFirst = reviewing ? 'review-all' : 'files';
+  const leftSecond = reviewing ? 'files' : 'review-all';
+  api.addPanel({
+    id: leftFirst,
+    component: leftFirst,
+    title: leftFirst === 'review-all' ? 'Comments' : 'Files',
     position: { referencePanel: 'editor', direction: 'left' },
-    initialWidth: leftWidth,
+    initialWidth: reviewing ? 304 : 208,
   });
   api.addPanel({
-    id: second,
-    component: second,
-    title: second === 'review' ? reviewTitle() : 'Files',
-    position: { referencePanel: first, direction: 'within' },
+    id: leftSecond,
+    component: leftSecond,
+    title: leftSecond === 'review-all' ? 'Comments' : 'Files',
+    position: { referencePanel: leftFirst, direction: 'within' },
     inactive: true,
   });
   api.addPanel({
     id: 'outline',
     component: 'outline',
     title: 'Outline',
-    position: { referencePanel: first, direction: 'below' },
+    position: { referencePanel: leftFirst, direction: 'below' },
     inactive: true,
     initialHeight: 260,
   });
@@ -197,8 +222,13 @@ function restoreOrBuild(api: DockviewApi, name: LayoutName) {
   if (saved) {
     try {
       api.fromJSON(JSON.parse(saved));
+      // a layout saved before the review split lacks the new panels; treat it
+      // as invalid rather than stranding the user without them
+      if (!api.getPanel('review-current') || !api.getPanel('review-all')) {
+        throw new Error('stale layout');
+      }
       // the serialized layout carries the review title from when it was saved
-      api.getPanel('review')?.setTitle(reviewTitle());
+      api.getPanel('review-current')?.setTitle(reviewTitle());
       return;
     } catch {
       localStorage.removeItem(storageKey(name));
@@ -240,7 +270,7 @@ function onReady(event: DockviewReadyEvent) {
 }
 
 watch(commentCount, () => {
-  dock.value?.getPanel('review')?.setTitle(reviewTitle());
+  dock.value?.getPanel('review-current')?.setTitle(reviewTitle());
 });
 
 onBeforeUnmount(() => {

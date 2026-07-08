@@ -15,6 +15,9 @@ export interface CommentDraft {
 }
 
 const props = defineProps<{
+  /** 'file' hangs the current file's threads beside their source lines;
+   * 'all' is a plain list grouped by file. */
+  scope: 'file' | 'all';
   draft: CommentDraft | null;
   /** Document-space y-coordinates of the current file's anchors. */
   anchors: CommentAnchor[];
@@ -31,7 +34,6 @@ const emit = defineEmits<{
 const okayeg = useOkayegStore();
 const auth = useAuthStore();
 
-const scope = ref<'file' | 'all'>('file');
 const showResolved = ref(false);
 const draftBody = ref('');
 const draftInput = ref<HTMLTextAreaElement>();
@@ -90,21 +92,28 @@ const resolvedCount = computed(
 );
 
 // ---- position-matched layout (file scope) ----
-// Cards sit at the same height as their anchor line in the editor; when two
+// Cards hang at the same height as their anchor line in the editor; when two
 // would overlap, later ones get pushed down. The active thread (or the draft)
 // wins its exact position and neighbors give way around it. Card positions
 // are computed in document space, and the whole lane is translated to follow
-// the editor's scroll, so scrolling never relayouts.
+// the editor's scroll, so scrolling never relayouts. The one exception is the
+// priority card: when its anchor scrolls out of the pane, it pins to the
+// nearer edge and slides back into alignment as the anchor returns.
 
 const GAP = 8;
 const FALLBACK_HEIGHT = 72;
+// keep pinned cards clear of the lane's fade mask
+const EDGE_PAD = 24;
 
 const heights = reactive(new Map<string, number>());
+const laneHeight = ref(0);
 const observer = new ResizeObserver((entries) => {
   for (const entry of entries) {
-    const id = (entry.target as HTMLElement).dataset.commentId;
-    if (id) {
-      heights.set(id, entry.target.getBoundingClientRect().height);
+    const el = entry.target as HTMLElement;
+    if (el === lane.value) {
+      laneHeight.value = el.clientHeight;
+    } else if (el.dataset.commentId) {
+      heights.set(el.dataset.commentId, el.getBoundingClientRect().height);
     }
   }
 });
@@ -115,7 +124,19 @@ function observeCard(el: unknown) {
   }
 }
 
+watch(lane, (el) => {
+  if (el) {
+    observer.observe(el);
+    laneHeight.value = el.clientHeight;
+  }
+});
+
 onBeforeUnmount(() => observer.disconnect());
+
+/** The card that wins alignment (and edge-pinning): the draft, else the active thread. */
+const priorityId = computed(() =>
+  props.draft ? '__draft' : (okayeg.activeCommentId ?? null),
+);
 
 const cardTops = computed(() => {
   const anchorY = new Map(props.anchors.map((a) => [a.id, a.y]));
@@ -130,11 +151,9 @@ const cardTops = computed(() => {
 
   const desired = ids.map((id) => anchorY.get(id) ?? 0);
   const height = (id: string) => heights.get(id) ?? FALLBACK_HEIGHT;
-  const tops = new Array<number>(ids.length);
+  const tops: number[] = Array.from({ length: ids.length }, () => 0);
 
-  const priority = props.draft
-    ? ids.indexOf('__draft')
-    : ids.findIndex((id) => id === okayeg.activeCommentId);
+  const priority = ids.indexOf(priorityId.value ?? '');
 
   // place the priority card exactly, stack the rest away from it; with no
   // priority card, a plain top-down sweep
@@ -157,6 +176,53 @@ const laneShift = computed(() => {
   }
   return props.viewport.documentTop - lane.value.getBoundingClientRect().top;
 });
+
+/**
+ * The priority card's pinned position, or null while its anchor is in view.
+ * Pane-space bounds are converted back to document space so the card can stay
+ * inside the translated track.
+ */
+const pinnedTop = computed(() => {
+  const id = priorityId.value;
+  if (!id || !laneHeight.value) {
+    return null;
+  }
+  const top = cardTops.value.get(id);
+  if (top === undefined) {
+    return null;
+  }
+  const height = heights.get(id) ?? FALLBACK_HEIGHT;
+  const shift = laneShift.value;
+  const min = EDGE_PAD - shift;
+  const max = Math.max(min, laneHeight.value - height - EDGE_PAD - shift);
+  const clamped = Math.min(Math.max(top, min), max);
+  return clamped === top ? null : clamped;
+});
+
+function cardTop(id: string): number {
+  if (id === priorityId.value && pinnedTop.value !== null) {
+    return pinnedTop.value;
+  }
+  return cardTops.value.get(id) ?? 0;
+}
+
+/** Pinned cards track the scroll frame by frame; easing would make them lag. */
+function pinned(id: string): boolean {
+  return id === priorityId.value && pinnedTop.value !== null;
+}
+
+/** Cards the pinned card floats over fade back so it reads as a layer above. */
+function obscured(id: string): boolean {
+  const pin = pinnedTop.value;
+  const pinId = priorityId.value;
+  if (pin === null || !pinId || id === pinId) {
+    return false;
+  }
+  const pinBottom = pin + (heights.get(pinId) ?? FALLBACK_HEIGHT);
+  const top = cardTops.value.get(id) ?? 0;
+  const bottom = top + (heights.get(id) ?? FALLBACK_HEIGHT);
+  return top < pinBottom + GAP && bottom > pin - GAP;
+}
 
 function activate(c: OkayegComment) {
   if (c.file && c.file !== okayeg.currentFile) {
@@ -189,6 +255,18 @@ function cancelDraft() {
   emit('draftDone');
 }
 
+// which file groups the user folded shut; groups default to open so the
+// panel never hides threads unasked
+const collapsed = reactive(new Set<string>());
+
+function setCollapsed(file: string, value: boolean) {
+  if (value) {
+    collapsed.add(file);
+  } else {
+    collapsed.delete(file);
+  }
+}
+
 function reply(parent: string, body: string) {
   const author = self.value;
   if (author) {
@@ -211,22 +289,6 @@ watch(
 
 <template>
   <aside class="panel">
-    <div class="panel-head">
-      <span class="label-xs title">Review</span>
-      <div class="scope">
-        <button
-          class="scope-btn text-xs"
-          :class="{ on: scope === 'file' }"
-          @click="scope = 'file'"
-        >
-          This file
-        </button>
-        <button class="scope-btn text-xs" :class="{ on: scope === 'all' }" @click="scope = 'all'">
-          All
-        </button>
-      </div>
-    </div>
-
     <!-- file scope: cards absolutely positioned to track the source; the
          track translates with the editor's scroll and wheel input over the
          lane scrolls the editor -->
@@ -241,8 +303,9 @@ watch(
         v-if="draft"
         :ref="observeCard"
         class="lane-card draft"
+        :class="{ pinned: pinned('__draft'), obscured: obscured('__draft') }"
         data-comment-id="__draft"
-        :style="{ top: `${cardTops.get('__draft') ?? 0}px` }"
+        :style="{ top: `${cardTop('__draft')}px` }"
       >
         <blockquote class="draft-quote text-xs">{{ draft.quote }}</blockquote>
         <textarea
@@ -266,8 +329,9 @@ watch(
         :key="thread.id"
         :ref="observeCard"
         class="lane-card"
+        :class="{ pinned: pinned(thread.id), obscured: obscured(thread.id) }"
         :data-comment-id="thread.id"
-        :style="{ top: `${cardTops.get(thread.id) ?? 0}px` }"
+        :style="{ top: `${cardTop(thread.id)}px` }"
       >
         <CommentCard
           :comment="thread"
@@ -289,24 +353,35 @@ watch(
       </p>
     </div>
 
-    <!-- all scope: a plain list grouped by file -->
+    <!-- all scope: threads grouped by file, each group collapsible -->
     <div v-else class="threads">
-      <template v-for="group in groupedThreads" :key="group.file">
-        <div class="group-head text-xs">{{ group.file }}</div>
-        <CommentCard
-          v-for="thread in group.threads"
-          :key="thread.id"
-          :comment="thread"
-          :replies="replies.get(thread.id) ?? []"
-          :active="thread.id === okayeg.activeCommentId"
-          :self="self"
-          @activate="activate(thread)"
-          @resolve="okayeg.setComment(thread.id, 'resolved', true)"
-          @reopen="okayeg.setComment(thread.id, 'resolved', false)"
-          @delete="okayeg.removeComment($event)"
-          @reply="reply(thread.id, $event)"
-        />
-      </template>
+      <details
+        v-for="group in groupedThreads"
+        :key="group.file"
+        class="group"
+        :open="!collapsed.has(group.file)"
+        @toggle="setCollapsed(group.file, !($event.target as HTMLDetailsElement).open)"
+      >
+        <summary class="group-head text-xs">
+          <span class="group-file">{{ group.file }}</span>
+          <span class="group-count">{{ group.threads.length }}</span>
+        </summary>
+        <div class="group-threads">
+          <CommentCard
+            v-for="thread in group.threads"
+            :key="thread.id"
+            :comment="thread"
+            :replies="replies.get(thread.id) ?? []"
+            :active="thread.id === okayeg.activeCommentId"
+            :self="self"
+            @activate="activate(thread)"
+            @resolve="okayeg.setComment(thread.id, 'resolved', true)"
+            @reopen="okayeg.setComment(thread.id, 'resolved', false)"
+            @delete="okayeg.removeComment($event)"
+            @reply="reply(thread.id, $event)"
+          />
+        </div>
+      </details>
       <p v-if="!groupedThreads.length" class="empty text-xs">No comments in this project yet.</p>
     </div>
 
@@ -325,41 +400,7 @@ watch(
   display: flex;
   flex-direction: column;
   min-height: 0;
-}
-
-.panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex: none;
-  padding: var(--space-2) var(--space-3);
-}
-
-.title {
-  color: var(--color-text-tertiary);
-}
-
-.scope {
-  display: flex;
-  gap: 2px;
-}
-
-.scope-btn {
-  padding: 2px var(--space-2);
-  color: var(--color-text-tertiary);
-  background: none;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.scope-btn:hover {
-  color: var(--color-text);
-}
-
-.scope-btn.on {
-  background: var(--color-primary-light);
-  color: var(--color-primary);
+  height: 100%;
 }
 
 /* The card lane mirrors the editor's scroll space; cards are pinned to their
@@ -393,24 +434,71 @@ watch(
   transition: top var(--duration-fast) var(--ease-out);
 }
 
+.lane-card.pinned {
+  transition: none;
+  z-index: 1;
+  filter: drop-shadow(0 2px 8px rgb(0 0 0 / 0.12));
+}
+
+.lane-card.obscured {
+  opacity: 0.25;
+  transition:
+    top var(--duration-fast) var(--ease-out),
+    opacity var(--duration-fast) var(--ease-out);
+}
+
 .threads {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: 0 var(--space-2) var(--space-2);
+  padding: var(--space-2);
   overflow: auto;
 }
 
 .group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
   margin-top: var(--space-1);
   padding: 0 var(--space-1);
   color: var(--color-text-tertiary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.group-head::marker {
+  content: none;
+}
+
+.group-head::before {
+  content: '▸';
+  flex: none;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.group[open] > .group-head::before {
+  transform: rotate(90deg);
+}
+
+.group-file {
   font-family: var(--font-mono);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.group-count {
+  flex: none;
+  color: var(--color-text-tertiary);
+}
+
+.group-threads {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 
 .draft {
