@@ -46,7 +46,7 @@ export const editorTheme = EditorView.theme(
     //  backgroundColor: 'var(--color-accent-200)',
     //},
     '.cm-comment-span': {
-      backgroundColor: 'color-mix(in srgb, var(--color-warning-200) 55%, transparent)',
+      backgroundColor: 'color-mix(in srgb, var(--color-warning-200) 35%, transparent)',
       borderBottom: '2px solid var(--color-warning-200)',
       cursor: 'pointer',
     },
