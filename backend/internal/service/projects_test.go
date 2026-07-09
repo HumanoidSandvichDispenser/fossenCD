@@ -171,94 +171,137 @@ func TestCreateProjectWritesAuthzConfig(t *testing.T) {
 	}
 }
 
-func TestRegisterPeerWritesDB(t *testing.T) {
+func TestAddKeyWritesDB(t *testing.T) {
 	svc := newServices(t)
 	ctx := context.Background()
 	a := ownerID(t, svc, "alice")
-	p, _ := svc.Projects.Create(ctx, a, "doc")
 
-	if err := svc.Projects.RegisterPeer(ctx, a, p.ID, endpointAlice); err != nil {
-		t.Fatalf("RegisterPeer: %v", err)
+	if err := svc.Keys.AddKey(ctx, a, endpointAlice, "laptop"); err != nil {
+		t.Fatalf("AddKey: %v", err)
 	}
 
-	// DB has the row
-	peers, err := svc.Projects.ListPeers(ctx, a, p.ID)
+	keys, err := svc.Keys.ListKeys(ctx, a)
 	if err != nil {
-		t.Fatalf("ListPeers: %v", err)
+		t.Fatalf("ListKeys: %v", err)
 	}
-	if len(peers) != 1 || peers[0].EndpointID != endpointAlice {
-		t.Fatalf("peers = %+v, want endpointAlice", peers)
+	if len(keys) != 1 || keys[0].EndpointID != endpointAlice || keys[0].Label != "laptop" {
+		t.Fatalf("keys = %+v, want endpointAlice/laptop", keys)
 	}
 }
 
-func TestRegisterPeerRejectsNonMember(t *testing.T) {
+// A key is account-scoped, so registering it needs no project at all: it grants
+// its owner access to every project they belong to.
+func TestAddKeyNeedsNoProject(t *testing.T) {
 	svc := newServices(t)
 	ctx := context.Background()
 	a := ownerID(t, svc, "alice")
-	ownerID(t, svc, "bob") // registered but not on the project
-	p, _ := svc.Projects.Create(ctx, a, "doc")
 
-	if err := svc.Projects.RegisterPeer(ctx, 999, p.ID, endpointBob); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("want ErrNotFound, got %v", err)
+	if err := svc.Keys.AddKey(ctx, a, endpointAlice, ""); err != nil {
+		t.Fatalf("AddKey without a project: %v", err)
 	}
-	// a non-member user id doesn't exist either; cover the access path
 }
 
-func TestRegisterPeerRejectsBadEndpointID(t *testing.T) {
+func TestAddKeyRejectsBadEndpointID(t *testing.T) {
 	svc := newServices(t)
 	ctx := context.Background()
 	a := ownerID(t, svc, "alice")
-	p, _ := svc.Projects.Create(ctx, a, "doc")
 
-	if err := svc.Projects.RegisterPeer(ctx, a, p.ID, "nothex"); !errors.Is(err, ErrBadRequest) {
+	if err := svc.Keys.AddKey(ctx, a, "nothex", ""); !errors.Is(err, ErrBadRequest) {
 		t.Fatalf("want ErrBadRequest, got %v", err)
 	}
 }
 
-func TestRegisterPeerIsIdempotent(t *testing.T) {
+func TestAddKeyIsIdempotent(t *testing.T) {
 	svc := newServices(t)
 	ctx := context.Background()
 	a := ownerID(t, svc, "alice")
-	p, _ := svc.Projects.Create(ctx, a, "doc")
 
 	for i := 0; i < 3; i++ {
-		if err := svc.Projects.RegisterPeer(ctx, a, p.ID, endpointAlice); err != nil {
-			t.Fatalf("RegisterPeer %d: %v", i, err)
+		if err := svc.Keys.AddKey(ctx, a, endpointAlice, "laptop"); err != nil {
+			t.Fatalf("AddKey %d: %v", i, err)
 		}
 	}
-	peers, _ := svc.Projects.ListPeers(ctx, a, p.ID)
-	if len(peers) != 1 {
-		t.Fatalf("expected 1 peer, got %d", len(peers))
+	keys, _ := svc.Keys.ListKeys(ctx, a)
+	if len(keys) != 1 {
+		t.Fatalf("expected 1 key, got %d", len(keys))
 	}
 }
 
-func TestUnregisterPeerOwnerCanRemoveAny(t *testing.T) {
+// AuthorizePeer grants an endpoint iff it's a registered key whose owner is a
+// member of the project. A key alone (owner not a member) is refused.
+func TestAuthorizePeerThroughMembership(t *testing.T) {
 	svc := newServices(t)
 	ctx := context.Background()
 	a := ownerID(t, svc, "alice")
 	b := ownerID(t, svc, "bob")
 	p, _ := svc.Projects.Create(ctx, a, "doc")
+
+	_ = svc.Keys.AddKey(ctx, a, endpointAlice, "")
+	_ = svc.Keys.AddKey(ctx, b, endpointBob, "")
+
+	// alice owns the project: her key is authorized
+	if ok, err := svc.Projects.AuthorizePeer(ctx, p.ID, endpointAlice); err != nil || !ok {
+		t.Fatalf("alice: ok=%v err=%v, want authorized", ok, err)
+	}
+	// bob has a key but isn't a member: refused
+	if ok, _ := svc.Projects.AuthorizePeer(ctx, p.ID, endpointBob); ok {
+		t.Fatal("bob authorized without membership")
+	}
+	// unknown endpoint: refused
+	if ok, _ := svc.Projects.AuthorizePeer(ctx, p.ID, endpointCarol); ok {
+		t.Fatal("unregistered endpoint authorized")
+	}
+
+	// once bob joins, his key is authorized
 	if err := svc.Projects.AddMember(ctx, a, p.ID, "bob"); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.Projects.RegisterPeer(ctx, b, p.ID, endpointBob); err != nil {
-		t.Fatalf("bob register: %v", err)
+	if ok, err := svc.Projects.AuthorizePeer(ctx, p.ID, endpointBob); err != nil || !ok {
+		t.Fatalf("bob after join: ok=%v err=%v, want authorized", ok, err)
+	}
+}
+
+// RemoveKey drops the row and closes the key's live sessions on every project
+// its owner belongs to, so revoking a device kills it everywhere at once.
+func TestRemoveKeyRevokesAcrossProjects(t *testing.T) {
+	svc := newServices(t)
+	ctx := context.Background()
+	a := ownerID(t, svc, "alice")
+	p1, _ := svc.Projects.Create(ctx, a, "one")
+	p2, _ := svc.Projects.Create(ctx, a, "two")
+	_ = svc.Keys.AddKey(ctx, a, endpointAlice, "laptop")
+
+	if err := svc.Keys.RemoveKey(ctx, a, endpointAlice); err != nil {
+		t.Fatalf("RemoveKey: %v", err)
 	}
 
-	if err := svc.Projects.UnregisterPeer(ctx, a, p.ID, endpointBob); err != nil {
-		t.Fatalf("owner unregister: %v", err)
-	}
-	peers, _ := svc.Projects.ListPeers(ctx, a, p.ID)
-	if len(peers) != 0 {
-		t.Fatalf("expected 0 peers, got %d", len(peers))
+	keys, _ := svc.Keys.ListKeys(ctx, a)
+	if len(keys) != 0 {
+		t.Fatalf("key survived removal: %+v", keys)
 	}
 	host := svc.Projects.host.(*noopHost)
-	if len(host.revoked) != 1 || host.revoked[0] != p.ID+" "+endpointBob {
-		t.Fatalf("revoked = %v, want bob's session closed", host.revoked)
+	want := map[string]bool{p1.ID + " " + endpointAlice: true, p2.ID + " " + endpointAlice: true}
+	if len(host.revoked) != 2 || !want[host.revoked[0]] || !want[host.revoked[1]] {
+		t.Fatalf("revoked = %v, want the key closed on both projects", host.revoked)
 	}
 }
 
-func TestUnregisterPeerMemberCanRemoveOwn(t *testing.T) {
+func TestRemoveKeyRejectsOthersKey(t *testing.T) {
+	svc := newServices(t)
+	ctx := context.Background()
+	a := ownerID(t, svc, "alice")
+	b := ownerID(t, svc, "bob")
+	_ = svc.Keys.AddKey(ctx, a, endpointAlice, "")
+
+	// bob can't delete alice's key: scoped to the caller's own rows
+	if err := svc.Keys.RemoveKey(ctx, b, endpointAlice); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
+
+// Removing a member keeps their account keys (valid on their other projects)
+// but closes any live sessions those keys hold on this project.
+func TestRemoveMemberRevokesKeysHere(t *testing.T) {
 	svc := newServices(t)
 	ctx := context.Background()
 	a := ownerID(t, svc, "alice")
@@ -267,37 +310,19 @@ func TestUnregisterPeerMemberCanRemoveOwn(t *testing.T) {
 	if err := svc.Projects.AddMember(ctx, a, p.ID, "bob"); err != nil {
 		t.Fatal(err)
 	}
-	_ = svc.Projects.RegisterPeer(ctx, b, p.ID, endpointBob)
-	_ = svc.Projects.RegisterPeer(ctx, a, p.ID, endpointAlice)
-
-	// bob can drop his own endpoint, but not alice's
-	if err := svc.Projects.UnregisterPeer(ctx, b, p.ID, endpointBob); err != nil {
-		t.Fatalf("remove own: %v", err)
-	}
-	if err := svc.Projects.UnregisterPeer(ctx, b, p.ID, endpointAlice); !errors.Is(err, ErrUnauthorized) {
-		t.Fatalf("remove other's: want ErrUnauthorized, got %v", err)
-	}
-}
-
-func TestRemoveMemberRevokesPeers(t *testing.T) {
-	svc := newServices(t)
-	ctx := context.Background()
-	a := ownerID(t, svc, "alice")
-	b := ownerID(t, svc, "bob")
-	p, _ := svc.Projects.Create(ctx, a, "doc")
-	if err := svc.Projects.AddMember(ctx, a, p.ID, "bob"); err != nil {
-		t.Fatal(err)
-	}
-	_ = svc.Projects.RegisterPeer(ctx, b, p.ID, endpointBob)
-	_ = svc.Projects.RegisterPeer(ctx, b, p.ID, endpointCarol)
+	_ = svc.Keys.AddKey(ctx, b, endpointBob, "laptop")
+	_ = svc.Keys.AddKey(ctx, b, endpointCarol, "desktop")
 
 	if err := svc.Projects.RemoveMember(ctx, a, p.ID, b); err != nil {
 		t.Fatalf("RemoveMember: %v", err)
 	}
-	peers, _ := svc.Projects.ListPeers(ctx, a, p.ID)
-	if len(peers) != 0 {
-		t.Fatalf("bob's peer rows survived removal: %+v", peers)
+
+	// keys survive: they belong to bob's account, not the project
+	keys, _ := svc.Keys.ListKeys(ctx, b)
+	if len(keys) != 2 {
+		t.Fatalf("bob's keys = %+v, want both kept", keys)
 	}
+	// but both were revoked on this project
 	host := svc.Projects.host.(*noopHost)
 	if len(host.revoked) != 2 {
 		t.Fatalf("revoked = %v, want both of bob's sessions closed", host.revoked)

@@ -34,6 +34,7 @@ func New(svc *service.Services, secure bool) http.Handler {
 
 		s.registerAuth(api)
 		s.registerProjects(api)
+		s.registerKeys(api)
 	})
 	return router
 }

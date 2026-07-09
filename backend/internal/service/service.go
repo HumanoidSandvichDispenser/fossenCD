@@ -13,6 +13,7 @@ import (
 type Services struct {
 	Auth     *AuthService
 	Projects *ProjectService
+	Keys     *KeyService
 }
 
 type Options struct {
@@ -44,6 +45,11 @@ func New(o Options) *Services {
 			host:        o.Host,
 			authzScript: o.AuthzScript,
 			authzSocket: o.AuthzSocket,
+		},
+		Keys: &KeyService{
+			users:    users,
+			projects: projects,
+			host:     o.Host,
 		},
 	}
 }

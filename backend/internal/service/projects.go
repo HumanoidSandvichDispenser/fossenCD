@@ -54,20 +54,22 @@ func (s *ProjectService) writeAuthzConfig(projectID string) error {
 }
 
 // AuthorizePeer is the decision behind the authz socket: whether endpointID may
-// sync projectID. It holds when the peer is registered on the project and its
-// registering user is still a member. eg asks once per incoming connection.
+// sync projectID. It holds when the endpoint is a key registered to some account
+// and that account is a member of the project. eg asks once per incoming
+// connection. A key authorizes its owner on every project they belong to, so the
+// decision is endpoint -> owning account -> membership.
 func (s *ProjectService) AuthorizePeer(ctx context.Context, projectID, endpointID string) (bool, error) {
 	if !okayeg.ValidEndpointID(endpointID) {
 		return false, nil
 	}
-	peer, err := s.projects.GetPeer(ctx, projectID, endpointID)
+	key, err := s.users.GetKeyByEndpoint(ctx, endpointID)
 	if errors.Is(err, store.ErrNotFound) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
-	if _, err := s.projects.GetMember(ctx, projectID, peer.UserID); err != nil {
+	if _, err := s.projects.GetMember(ctx, projectID, key.UserID); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return false, nil
 		}
@@ -122,63 +124,6 @@ func (s *ProjectService) Endpoint(ctx context.Context, userID uint, id string) (
 	return key.EndpointID(), nil
 }
 
-// RegisterPeer authorizes a browser's ed identity (its EndpointId) to sync the
-// project by recording it in the project_peer table, which the authz command
-// consults when the peer connects. Requires membership. Idempotent.
-func (s *ProjectService) RegisterPeer(ctx context.Context, userID uint, projectID, endpointID string) error {
-	if err := s.access(ctx, userID, projectID); err != nil {
-		return err
-	}
-	if !okayeg.ValidEndpointID(endpointID) {
-		return ErrBadRequest
-	}
-
-	if err := s.projects.AddPeer(ctx, projectID, userID, endpointID); err != nil {
-		return mapErr(err)
-	}
-
-	if err := s.writeAuthzConfig(projectID); err != nil {
-		return err
-	}
-	s.host.EnsureHost(projectID)
-	return nil
-}
-
-// UnregisterPeer revokes a browser's access: drops the project_peer row (so
-// the authz command refuses the peer's next connection) and then closes any
-// live session over the daemon's stdin repl. The project owner may remove any
-// peer; a member may only remove their own.
-func (s *ProjectService) UnregisterPeer(ctx context.Context, userID uint, projectID, endpointID string) error {
-	peer, err := s.projects.GetPeer(ctx, projectID, endpointID)
-	if err != nil {
-		return mapErr(err)
-	}
-
-	// membership is the floor; owner or the registering user may proceed
-	isOwner, err := s.isOwner(ctx, userID, projectID)
-	if err != nil {
-		return err
-	}
-	if !isOwner && peer.UserID != userID {
-		return ErrUnauthorized
-	}
-
-	if err := s.projects.RemovePeer(ctx, projectID, endpointID); err != nil {
-		return mapErr(err)
-	}
-
-	return s.host.Revoke(projectID, endpointID)
-}
-
-// ListPeers returns the endpoints authorized on a project, with their
-// registering user. Any member may view them.
-func (s *ProjectService) ListPeers(ctx context.Context, userID uint, projectID string) ([]store.ProjectPeer, error) {
-	if err := s.access(ctx, userID, projectID); err != nil {
-		return nil, err
-	}
-	return s.projects.ListPeers(ctx, projectID)
-}
-
 // AddMember adds login (username or email) to the project as a member. Owner only.
 func (s *ProjectService) AddMember(ctx context.Context, actorID uint, id, login string) error {
 	if err := s.requireOwner(ctx, actorID, id); err != nil {
@@ -191,32 +136,30 @@ func (s *ProjectService) AddMember(ctx context.Context, actorID uint, id, login 
 	return s.projects.AddMember(ctx, id, u.ID, store.RoleMember)
 }
 
-// RemoveMember removes a user from the project and revokes every browser they
-// registered, so a removed collaborator can't reconnect. Owner only.
+// RemoveMember removes a user from the project and closes any live sessions
+// their keys hold on it, so a removed collaborator can't keep syncing. The keys
+// are account-owned and stay registered (they remain valid on the user's other
+// projects); dropping the membership is what makes the authz gate refuse their
+// next connection here. Owner only.
 func (s *ProjectService) RemoveMember(ctx context.Context, actorID uint, id string, userID uint) error {
 	if err := s.requireOwner(ctx, actorID, id); err != nil {
 		return err
 	}
 
-	peers, err := s.projects.PeersForUser(ctx, id, userID)
+	keys, err := s.users.ListKeys(ctx, userID)
 	if err != nil {
-		return mapErr(err)
+		return err
 	}
 
-	// drop the peer rows before the member row, so a failure leaves the user
-	// still a member rather than a non-member whose browsers can still connect
-	if len(peers) > 0 {
-		if err := s.projects.RemovePeersByUser(ctx, id, userID); err != nil {
-			return mapErr(err)
-		}
-	}
+	// drop the membership before closing sessions, so the gate denies reconnects
+	// by the time we revoke; a failure here leaves them a member rather than a
+	// non-member whose peers can still connect
 	if err := s.projects.RemoveMember(ctx, id, userID); err != nil {
 		return mapErr(err)
 	}
 
-	// policy is updated; now close whatever the user still has running
-	for _, p := range peers {
-		if err := s.host.Revoke(id, p.EndpointID); err != nil {
+	for _, k := range keys {
+		if err := s.host.Revoke(id, k.EndpointID); err != nil {
 			return err
 		}
 	}
@@ -262,15 +205,6 @@ func (s *ProjectService) requireOwner(ctx context.Context, userID uint, id strin
 	}
 
 	return nil
-}
-
-// isOwner reports membership+ownership; missing membership is an error.
-func (s *ProjectService) isOwner(ctx context.Context, userID uint, id string) (bool, error) {
-	m, err := s.projects.GetMember(ctx, id, userID)
-	if err != nil {
-		return false, mapErr(err)
-	}
-	return m.Role == store.RoleOwner, nil
 }
 
 func (s *ProjectService) loadKey(ctx context.Context, userID uint, id string) (okayeg.Key, error) {

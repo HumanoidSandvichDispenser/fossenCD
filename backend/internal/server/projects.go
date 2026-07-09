@@ -47,22 +47,6 @@ func (s *Server) registerProjects(api huma.API) {
 	}, s.handleProjectEndpoint)
 
 	huma.Register(api, huma.Operation{
-		OperationID: "list-peers", Method: http.MethodGet, Path: "/projects/{id}/peers",
-		Summary: "List the browser endpoints authorized to sync this project",
-	}, s.handleListPeers)
-
-	huma.Register(api, huma.Operation{
-		OperationID: "register-peer", Method: http.MethodPost, Path: "/projects/{id}/peers",
-		Summary: "Authorize a browser endpoint (its ed identity) to sync the project",
-		DefaultStatus: http.StatusCreated,
-	}, s.handleRegisterPeer)
-
-	huma.Register(api, huma.Operation{
-		OperationID: "unregister-peer", Method: http.MethodDelete, Path: "/projects/{id}/peers/{endpointId}",
-		Summary: "Revoke a browser endpoint's access", DefaultStatus: http.StatusNoContent,
-	}, s.handleUnregisterPeer)
-
-	huma.Register(api, huma.Operation{
 		OperationID: "list-members", Method: http.MethodGet, Path: "/projects/{id}/members",
 		Summary: "List a project's collaborators",
 	}, s.handleListMembers)
@@ -164,68 +148,6 @@ func (s *Server) handleProjectEndpoint(ctx context.Context, in *idInput) (*endpo
 		return nil, httpError(err)
 	}
 	return &endpointOutput{Body: endpointBody{EndpointID: endpoint}}, nil
-}
-
-type peerView struct {
-	EndpointID string `json:"endpoint_id"`
-	UserID     uint   `json:"user_id"`
-	Username   string `json:"username"`
-}
-
-type peersOutput struct{ Body []peerView }
-
-func (s *Server) handleListPeers(ctx context.Context, in *idInput) (*peersOutput, error) {
-	uid, err := requireUser(ctx)
-	if err != nil {
-		return nil, err
-	}
-	peers, err := s.svc.Projects.ListPeers(ctx, uid, in.ID)
-	if err != nil {
-		return nil, httpError(err)
-	}
-	out := &peersOutput{Body: make([]peerView, 0, len(peers))}
-	for _, p := range peers {
-		out.Body = append(out.Body, peerView{
-			EndpointID: p.EndpointID,
-			UserID:     p.UserID,
-			Username:   p.User.Username,
-		})
-	}
-	return out, nil
-}
-
-type registerPeerInput struct {
-	ID   string `path:"id"`
-	Body struct {
-		EndpointID string `json:"endpointId" minLength:"1"`
-	}
-}
-
-func (s *Server) handleRegisterPeer(ctx context.Context, in *registerPeerInput) (*struct{}, error) {
-	uid, err := requireUser(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.svc.Projects.RegisterPeer(ctx, uid, in.ID, in.Body.EndpointID); err != nil {
-		return nil, httpError(err)
-	}
-	return nil, nil
-}
-
-type unregisterPeerInput struct {
-	ID         string `path:"id"`
-	EndpointID string `path:"endpointId"`
-}
-
-func (s *Server) handleUnregisterPeer(ctx context.Context, in *unregisterPeerInput) (*struct{}, error) {
-	uid, err := requireUser(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.svc.Projects.UnregisterPeer(ctx, uid, in.ID, in.EndpointID); err != nil {
-		return nil, httpError(err)
-	}
-	return nil, nil
 }
 
 type memberView struct {

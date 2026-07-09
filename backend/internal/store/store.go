@@ -1,7 +1,8 @@
 // Package store holds the gorm models and database handle. Only user accounts,
-// project metadata, and registered peer endpoints live here; okayeg keys stay
-// on disk in each project's .eg/ (see internal/okayeg). The package is
-// database-agnostic: callers pass the gorm.Dialector.
+// project metadata, and account peer public keys live here; okayeg private keys
+// stay on disk in each project's .eg/ (see internal/okayeg), and user peers hold
+// their own private keys locally. The package is database-agnostic: callers pass
+// the gorm.Dialector.
 package store
 
 import (
@@ -20,7 +21,7 @@ func Open(dialector gorm.Dialector) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := db.AutoMigrate(&User{}, &Project{}, &ProjectMember{}, &ProjectPeer{}, &Session{}); err != nil {
+	if err := db.AutoMigrate(&User{}, &Project{}, &ProjectMember{}, &UserKey{}, &Session{}); err != nil {
 		return nil, err
 	}
 	return db, nil
