@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AddKeyData, AddKeyErrors, AddKeyResponses, AddMemberData, AddMemberErrors, AddMemberResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, DeleteProjectData, DeleteProjectErrors, DeleteProjectResponses, GetProjectData, GetProjectErrors, GetProjectResponses, ListKeysData, ListKeysErrors, ListKeysResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, MeData, MeErrors, MeResponses, ProjectEndpointData, ProjectEndpointErrors, ProjectEndpointResponses, ProjectLogsData, ProjectLogsErrors, ProjectLogsResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveKeyData, RemoveKeyErrors, RemoveKeyResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses } from './types.gen';
+import type { AddKeyData, AddKeyErrors, AddKeyResponses, AddMemberData, AddMemberErrors, AddMemberResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, DeleteProjectData, DeleteProjectErrors, DeleteProjectResponses, GetProjectData, GetProjectErrors, GetProjectResponses, ListKeysData, ListKeysErrors, ListKeysResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, MeData, MeErrors, MeResponses, ProjectEndpointData, ProjectEndpointErrors, ProjectEndpointResponses, ProjectLogsData, ProjectLogsErrors, ProjectLogsResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveKeyData, RemoveKeyErrors, RemoveKeyResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RenameKeyData, RenameKeyErrors, RenameKeyResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -73,6 +73,18 @@ export const addKey = <ThrowOnError extends boolean = false>(options: Options<Ad
  * Revoke a peer key and close its live sessions
  */
 export const removeKey = <ThrowOnError extends boolean = false>(options: Options<RemoveKeyData, ThrowOnError>) => (options.client ?? client).delete<RemoveKeyResponses, RemoveKeyErrors, ThrowOnError>({ url: '/keys/{endpointId}', ...options });
+
+/**
+ * Rename a peer key
+ */
+export const renameKey = <ThrowOnError extends boolean = false>(options: Options<RenameKeyData, ThrowOnError>) => (options.client ?? client).patch<RenameKeyResponses, RenameKeyErrors, ThrowOnError>({
+    url: '/keys/{endpointId}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * List the caller's projects

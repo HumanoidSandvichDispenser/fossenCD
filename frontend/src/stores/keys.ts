@@ -1,7 +1,7 @@
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
 
-import { listKeys, addKey, removeKey } from '@/client/sdk.gen';
+import { listKeys, addKey, removeKey, renameKey } from '@/client/sdk.gen';
 import type { KeyView } from '@/client/types.gen';
 import { useClientStore } from './client';
 
@@ -60,5 +60,20 @@ export const useKeysStore = defineStore('keys', () => {
     keys.value = keys.value.filter((k) => k.endpoint_id !== endpointId);
   }
 
-  return { keys, loaded, list, ensure, remove };
+  /** Rename a key. The endpoint id stays fixed. */
+  async function rename(endpointId: string, newLabel: string): Promise<void> {
+    const { error } = await renameKey({
+      client,
+      path: { endpointId },
+      body: { newLabel },
+    });
+    if (error) {
+      throw new Error(errorMessage(error, 'Could not rename key'));
+    }
+    keys.value = keys.value.map((k) =>
+      k.endpoint_id === endpointId ? { ...k, label: newLabel } : k,
+    );
+  }
+
+  return { keys, loaded, list, ensure, remove, rename };
 });

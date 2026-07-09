@@ -151,6 +151,14 @@ export type RegisterInputBody = {
     username: string;
 };
 
+export type RenameKeyInputBody = {
+    /**
+     * A URL to the JSON Schema for this object.
+     */
+    readonly $schema?: string;
+    newLabel: string;
+};
+
 export type UserView = {
     /**
      * A URL to the JSON Schema for this object.
@@ -225,6 +233,10 @@ export type RegisterInputBodyWritable = {
     email: string;
     password: string;
     username: string;
+};
+
+export type RenameKeyInputBodyWritable = {
+    newLabel: string;
 };
 
 export type UserViewWritable = {
@@ -407,6 +419,33 @@ export type RemoveKeyResponses = {
 };
 
 export type RemoveKeyResponse = RemoveKeyResponses[keyof RemoveKeyResponses];
+
+export type RenameKeyData = {
+    body: RenameKeyInputBodyWritable;
+    path: {
+        endpointId: string;
+    };
+    query?: never;
+    url: '/keys/{endpointId}';
+};
+
+export type RenameKeyErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type RenameKeyError = RenameKeyErrors[keyof RenameKeyErrors];
+
+export type RenameKeyResponses = {
+    /**
+     * No Content
+     */
+    204: void;
+};
+
+export type RenameKeyResponse = RenameKeyResponses[keyof RenameKeyResponses];
 
 export type ListProjectsData = {
     body?: never;

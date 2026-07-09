@@ -9,6 +9,9 @@ const okayeg = useOkayegStore();
 
 const error = ref<string | null>(null);
 const revoking = ref<string | null>(null);
+// the key currently being renamed, or null
+const renaming = ref<string | null>(null);
+const renameLabel = ref('');
 // this browser's own endpoint id, so we can mark it and warn before self-revoke
 const thisDevice = ref<string | null>(null);
 
@@ -44,8 +47,12 @@ async function addKey() {
 const sorted = computed(() =>
   [...keys.keys].sort((a, b) => {
     // surface this device first, then newest
-    if (a.endpoint_id === thisDevice.value) {return -1;}
-    if (b.endpoint_id === thisDevice.value) {return 1;}
+    if (a.endpoint_id === thisDevice.value) {
+      return -1;
+    }
+    if (b.endpoint_id === thisDevice.value) {
+      return 1;
+    }
     return b.created_at.localeCompare(a.created_at);
   }),
 );
@@ -93,6 +100,27 @@ async function revoke(endpointId: string) {
     revoking.value = null;
   }
 }
+
+function startRename(endpointId: string, label: string) {
+  renaming.value = endpointId;
+  renameLabel.value = label;
+}
+
+function cancelRename() {
+  renaming.value = null;
+  renameLabel.value = '';
+}
+
+async function commitRename(endpointId: string) {
+  error.value = null;
+  try {
+    await keys.rename(endpointId, renameLabel.value.trim());
+    renaming.value = null;
+    renameLabel.value = '';
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Could not rename key';
+  }
+}
 </script>
 
 <template>
@@ -102,9 +130,9 @@ async function revoke(endpointId: string) {
     </header>
 
     <p class="intro text-sm">
-      Each browser and native peer holds its own key and syncs every project you
-      belong to. Only the public half is stored here; revoke a key to cut off a
-      lost or unused device everywhere at once.
+      Each browser and native peer holds its own key and syncs every project you belong to. Only the
+      public half is stored here; revoke a key to cut off a lost or unused device everywhere at
+      once.
     </p>
 
     <form class="add card" @submit.prevent="addKey">
@@ -123,11 +151,7 @@ async function revoke(endpointId: string) {
           autocomplete="off"
         />
       </div>
-      <button
-        type="submit"
-        class="label-sm btn btn-sm"
-        :disabled="adding || !newIdValid"
-      >
+      <button type="submit" class="label-sm btn btn-sm" :disabled="adding || !newIdValid">
         {{ adding ? 'Adding...' : 'Add key' }}
       </button>
     </form>
@@ -144,20 +168,52 @@ async function revoke(endpointId: string) {
     <ul v-else class="list">
       <li v-for="key in sorted" :key="key.endpoint_id" class="card">
         <div class="info">
-          <span class="name label-md">
-            {{ key.label || 'Unnamed device' }}
-            <span v-if="key.endpoint_id === thisDevice" class="chip label-sm">This device</span>
-          </span>
-          <span class="meta text-xs" :title="key.endpoint_id">{{ shortId(key.endpoint_id) }}</span>
-          <span class="meta text-xs">Added {{ formatDate(key.created_at) }}</span>
+          <form
+            v-if="renaming === key.endpoint_id"
+            class="edit"
+            @submit.prevent="commitRename(key.endpoint_id)"
+          >
+            <input
+              v-model="renameLabel"
+              class="text-sm field"
+              placeholder="New label"
+              maxlength="128"
+              autocomplete="off"
+              autofocus
+            />
+            <div class="row">
+              <button type="submit" class="label-sm btn btn-sm">Save</button>
+              <button type="button" class="label-sm btn btn-sm btn-ghost" @click="cancelRename">
+                Cancel
+              </button>
+            </div>
+          </form>
+          <template v-else>
+            <span class="name label-md">
+              {{ key.label || 'Unnamed device' }}
+              <span v-if="key.endpoint_id === thisDevice" class="chip label-sm">This device</span>
+            </span>
+            <span class="meta text-xs" :title="key.endpoint_id">{{
+              shortId(key.endpoint_id)
+            }}</span>
+            <span class="meta text-xs">Added {{ formatDate(key.created_at) }}</span>
+          </template>
         </div>
-        <button
-          class="label-sm btn btn-sm btn-danger"
-          :disabled="revoking === key.endpoint_id"
-          @click="revoke(key.endpoint_id)"
-        >
-          {{ revoking === key.endpoint_id ? 'Revoking...' : 'Revoke' }}
-        </button>
+        <div v-if="renaming !== key.endpoint_id" class="actions">
+          <button
+            class="label-sm btn btn-sm btn-ghost"
+            @click="startRename(key.endpoint_id, key.label)"
+          >
+            Rename
+          </button>
+          <button
+            class="label-sm btn btn-sm btn-danger"
+            :disabled="revoking === key.endpoint_id"
+            @click="revoke(key.endpoint_id)"
+          >
+            {{ revoking === key.endpoint_id ? 'Revoking...' : 'Revoke' }}
+          </button>
+        </div>
       </li>
     </ul>
   </main>
@@ -267,5 +323,28 @@ header {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--color-text-secondary);
 }
 </style>
