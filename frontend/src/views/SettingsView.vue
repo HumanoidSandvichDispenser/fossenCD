@@ -12,6 +12,35 @@ const revoking = ref<string | null>(null);
 // this browser's own endpoint id, so we can mark it and warn before self-revoke
 const thisDevice = ref<string | null>(null);
 
+// the add-a-native-key form: paste the id printed by `eg id`
+const newId = ref('');
+const newLabel = ref('');
+const adding = ref(false);
+const addError = ref<string | null>(null);
+
+const newIdValid = computed(() => /^[0-9a-f]{64}$/.test(newId.value.trim()));
+
+async function addKey() {
+  const endpointId = newId.value.trim();
+  if (!newIdValid.value) {
+    addError.value = 'That does not look like an endpoint id (64 lowercase hex characters).';
+    return;
+  }
+
+  addError.value = null;
+  adding.value = true;
+  try {
+    await keys.ensure(endpointId, newLabel.value.trim());
+    await keys.list();
+    newId.value = '';
+    newLabel.value = '';
+  } catch (e) {
+    addError.value = e instanceof Error ? e.message : 'Could not add key';
+  } finally {
+    adding.value = false;
+  }
+}
+
 const sorted = computed(() =>
   [...keys.keys].sort((a, b) => {
     // surface this device first, then newest
@@ -78,6 +107,32 @@ async function revoke(endpointId: string) {
       lost or unused device everywhere at once.
     </p>
 
+    <form class="add card" @submit.prevent="addKey">
+      <div class="add-fields">
+        <input
+          v-model="newId"
+          class="text-sm field mono"
+          placeholder="Endpoint id from `eg id`"
+          spellcheck="false"
+          autocomplete="off"
+        />
+        <input
+          v-model="newLabel"
+          class="text-sm field"
+          placeholder="Label (optional)"
+          autocomplete="off"
+        />
+      </div>
+      <button
+        type="submit"
+        class="label-sm btn btn-sm"
+        :disabled="adding || !newIdValid"
+      >
+        {{ adding ? 'Adding...' : 'Add key' }}
+      </button>
+    </form>
+    <p v-if="addError" class="error text-sm">{{ addError }}</p>
+
     <p v-if="error" class="error text-sm">{{ error }}</p>
 
     <p v-if="!keys.loaded" class="state text-sm">Loading...</p>
@@ -128,6 +183,36 @@ header {
 .error {
   margin-top: var(--space-4);
   color: var(--color-error);
+}
+
+.add {
+  margin-top: var(--space-6);
+  flex-direction: column;
+}
+
+.add .btn {
+  align-self: flex-end;
+}
+
+.add-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  min-width: 0;
+}
+
+.field {
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.mono {
+  font-family: var(--font-mono, monospace);
 }
 
 .state {
