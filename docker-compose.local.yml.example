@@ -14,7 +14,11 @@ services:
       # prebuilt eg over the image's baked copy
       - ${FOSSENCD_EG_BIN_HOST}:/usr/local/bin/eg
   frontend:
+    # mount the wasm-pack output OUTSIDE node_modules and point Vite at it with
+    # OKAYEG_WASM_LOCAL. The container's `bun install` on start owns
+    # node_modules, so overlaying the package there gets clobbered on restart;
+    # aliasing to a separate path sidesteps that entirely.
+    environment:
+      - OKAYEG_WASM_LOCAL=/okayeg-wasm
     volumes:
-      # wasm-pack output over the registry package inside the
-      # frontend_node_modules volume
-      - ${FOSSENCD_OKAYEG_WASM}:/app/node_modules/@sandvichxyz/okayeg-wasm
+      - ${FOSSENCD_OKAYEG_WASM}:/okayeg-wasm:ro

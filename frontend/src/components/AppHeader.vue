@@ -8,6 +8,7 @@ import UserMenu from '@/components/UserMenu.vue';
       <RouterLink :to="{ name: 'projects' }" class="brand">fossenCD</RouterLink>
       <nav class="nav">
         <RouterLink :to="{ name: 'projects' }" class="label-sm link">Projects</RouterLink>
+        <RouterLink :to="{ name: 'settings' }" class="label-sm link">Settings</RouterLink>
       </nav>
     </div>
     <div class="spacer" />

@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import EditorView from '@/views/EditorView.vue';
 import LoginView from '@/views/LoginView.vue';
 import ProjectsView from '@/views/ProjectsView.vue';
+import SettingsView from '@/views/SettingsView.vue';
 import { useAuthStore } from '@/stores/auth';
 
 const router = createRouter({
@@ -22,6 +23,12 @@ const router = createRouter({
       path: '/projects',
       name: 'projects',
       component: ProjectsView,
+      meta: { requiresAuth: true, chrome: true },
+    },
+    {
+      path: '/settings',
+      name: 'settings',
+      component: SettingsView,
       meta: { requiresAuth: true, chrome: true },
     },
     {

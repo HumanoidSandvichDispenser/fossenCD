@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router';
 
 import { useOkayegStore } from '@/stores/okayeg';
 import { useProjectsStore } from '@/stores/projects';
+import { useKeysStore } from '@/stores/keys';
 import type { ProjectView } from '@/client/types.gen';
 import EditorWorkspace from '@/components/EditorWorkspace.vue';
 import ShareProjectDialog from '@/components/ShareProjectDialog.vue';
@@ -12,6 +13,7 @@ import LogsDialog from '@/components/LogsDialog.vue';
 const route = useRoute();
 const okayeg = useOkayegStore();
 const projects = useProjectsStore();
+const keys = useKeysStore();
 
 const error = ref<string | null>(null);
 const project = ref<ProjectView | null>(null);
@@ -58,9 +60,10 @@ async function openProject(id: string) {
     if (!myId) {
       throw new Error('peer identity unavailable');
     }
-    // register first so the host's .eg/trust admits us before we dial; the host
-    // re-reads trust on every incoming connection, so this is enough
-    await projects.registerPeer(id, myId);
+    // register this browser's key on the account before we dial; the host's
+    // authz gate resolves the connecting endpoint to its owning account and
+    // admits it on every project that account is a member of. Idempotent.
+    await keys.ensure(myId, 'Browser');
     const endpoint = await projects.endpoint(id);
     if (!isCurrent()) {
       return;

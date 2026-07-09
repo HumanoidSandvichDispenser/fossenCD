@@ -7,6 +7,7 @@ import initOkayeg, {
 import wasmUrl from '@sandvichxyz/okayeg-wasm/okayeg_wasm_bg.wasm?url';
 
 import { applyWireDelta } from '@/teamtype/collab';
+import { loadOrCreateSeed } from '@/identity';
 import { VirtualFs } from '@/vfs';
 
 type ContentListener = (file: string, text: string) => void;
@@ -75,7 +76,11 @@ export const useOkayegStore = defineStore('okayeg', () => {
       return;
     }
     await initOkayeg({ module_or_path: wasmUrl });
-    const c = new OkayegClient();
+    // The identity seed lives in IndexedDB, so this browser keeps the same peer
+    // key across sessions; okayeg-wasm derives the keypair from it. Only the
+    // public half (nodeId) is ever uploaded, when we register the key.
+    const { seed } = await loadOrCreateSeed();
+    const c = OkayegClient.withSeed(seed);
     client = c;
 
     c.onLog((message: string) => {
@@ -246,6 +251,24 @@ export const useOkayegStore = defineStore('okayeg', () => {
     activeCommentId.value = id;
   }
 
+  /**
+   * This browser's peer id (hex EndpointId), derived from the persisted seed
+   * without touching the live client. Returns the running peer's id when one is
+   * up; otherwise spins a throwaway client just to read it and frees it again.
+   * Used by settings to mark and guard the current device in the key list.
+   */
+  async function deviceId(): Promise<string> {
+    if (nodeId.value) {
+      return nodeId.value;
+    }
+    await initOkayeg({ module_or_path: wasmUrl });
+    const { seed } = await loadOrCreateSeed();
+    const c = OkayegClient.withSeed(seed);
+    const id = c.nodeId();
+    c.free();
+    return id;
+  }
+
   return {
     vfs,
     ready,
@@ -261,6 +284,7 @@ export const useOkayegStore = defineStore('okayeg', () => {
     start,
     reset,
     connect,
+    deviceId,
     selectFile,
     setPreviewFile,
     read,

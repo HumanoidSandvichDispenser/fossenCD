@@ -4,20 +4,21 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}/api` | (string & {});
 };
 
+export type AddKeyInputBody = {
+    /**
+     * A URL to the JSON Schema for this object.
+     */
+    readonly $schema?: string;
+    endpointId: string;
+    label: string;
+};
+
 export type AddMemberInputBody = {
     /**
      * A URL to the JSON Schema for this object.
      */
     readonly $schema?: string;
     login: string;
-};
-
-export type EndpointBody = {
-    /**
-     * A URL to the JSON Schema for this object.
-     */
-    readonly $schema?: string;
-    endpointId: string;
 };
 
 export type Cookie = {
@@ -43,6 +44,14 @@ export type CreateProjectInputBody = {
      */
     readonly $schema?: string;
     name: string;
+};
+
+export type EndpointBody = {
+    /**
+     * A URL to the JSON Schema for this object.
+     */
+    readonly $schema?: string;
+    endpointId: string;
 };
 
 export type ErrorDetail = {
@@ -91,18 +100,10 @@ export type ErrorModel = {
     type?: string;
 };
 
-export type PeerView = {
+export type KeyView = {
+    created_at: string;
     endpoint_id: string;
-    user_id: number;
-    username: string;
-};
-
-export type RegisterPeerInputBody = {
-    /**
-     * A URL to the JSON Schema for this object.
-     */
-    readonly $schema?: string;
-    endpointId: string;
+    label: string;
 };
 
 export type LoginInputBody = {
@@ -160,16 +161,21 @@ export type UserView = {
     username: string;
 };
 
+export type AddKeyInputBodyWritable = {
+    endpointId: string;
+    label: string;
+};
+
 export type AddMemberInputBodyWritable = {
     login: string;
 };
 
-export type EndpointBodyWritable = {
-    endpointId: string;
-};
-
 export type CreateProjectInputBodyWritable = {
     name: string;
+};
+
+export type EndpointBodyWritable = {
+    endpointId: string;
 };
 
 export type ErrorModelWritable = {
@@ -197,10 +203,6 @@ export type ErrorModelWritable = {
      * A URI reference to human-readable documentation for the error.
      */
     type?: string;
-};
-
-export type RegisterPeerInputBodyWritable = {
-    endpointId: string;
 };
 
 export type LoginInputBodyWritable = {
@@ -330,6 +332,81 @@ export type RegisterResponses = {
 };
 
 export type RegisterResponse = RegisterResponses[keyof RegisterResponses];
+
+export type ListKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/keys';
+};
+
+export type ListKeysErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ListKeysError = ListKeysErrors[keyof ListKeysErrors];
+
+export type ListKeysResponses = {
+    /**
+     * OK
+     */
+    200: Array<KeyView> | null;
+};
+
+export type ListKeysResponse = ListKeysResponses[keyof ListKeysResponses];
+
+export type AddKeyData = {
+    body: AddKeyInputBodyWritable;
+    path?: never;
+    query?: never;
+    url: '/keys';
+};
+
+export type AddKeyErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type AddKeyError = AddKeyErrors[keyof AddKeyErrors];
+
+export type AddKeyResponses = {
+    /**
+     * Created
+     */
+    201: unknown;
+};
+
+export type RemoveKeyData = {
+    body?: never;
+    path: {
+        endpointId: string;
+    };
+    query?: never;
+    url: '/keys/{endpointId}';
+};
+
+export type RemoveKeyErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type RemoveKeyError = RemoveKeyErrors[keyof RemoveKeyErrors];
+
+export type RemoveKeyResponses = {
+    /**
+     * No Content
+     */
+    204: void;
+};
+
+export type RemoveKeyResponse = RemoveKeyResponses[keyof RemoveKeyResponses];
 
 export type ListProjectsData = {
     body?: never;
@@ -461,88 +538,6 @@ export type ProjectEndpointResponses = {
 };
 
 export type ProjectEndpointResponse = ProjectEndpointResponses[keyof ProjectEndpointResponses];
-
-export type ListPeersData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/projects/{id}/peers';
-};
-
-export type ListPeersErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ListPeersError = ListPeersErrors[keyof ListPeersErrors];
-
-export type ListPeersResponses = {
-    /**
-     * OK
-     */
-    200: Array<PeerView> | null;
-};
-
-export type ListPeersResponse = ListPeersResponses[keyof ListPeersResponses];
-
-export type RegisterPeerData = {
-    body: RegisterPeerInputBodyWritable;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/projects/{id}/peers';
-};
-
-export type RegisterPeerErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type RegisterPeerError = RegisterPeerErrors[keyof RegisterPeerErrors];
-
-export type RegisterPeerResponses = {
-    /**
-     * Created
-     */
-    201: void;
-};
-
-export type RegisterPeerResponse = RegisterPeerResponses[keyof RegisterPeerResponses];
-
-export type UnregisterPeerData = {
-    body?: never;
-    path: {
-        id: string;
-        endpointId: string;
-    };
-    query?: never;
-    url: '/projects/{id}/peers/{endpointId}';
-};
-
-export type UnregisterPeerErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type UnregisterPeerError = UnregisterPeerErrors[keyof UnregisterPeerErrors];
-
-export type UnregisterPeerResponses = {
-    /**
-     * No Content
-     */
-    204: void;
-};
-
-export type UnregisterPeerResponse = UnregisterPeerResponses[keyof UnregisterPeerResponses];
 
 export type ProjectLogsData = {
     body?: never;
