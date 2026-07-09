@@ -32,6 +32,12 @@ func (s *KeyService) ListKeys(ctx context.Context, userID uint) ([]store.UserKey
 	return s.users.ListKeys(ctx, userID)
 }
 
+// RenameKey changes the label of one of the caller's keys. The endpoint ID is
+// immutable.
+func (s *KeyService) RenameKey(ctx context.Context, userID uint, endpointID, newLabel string) error {
+	return s.users.RenameKey(ctx, userID, endpointID, newLabel)
+}
+
 // RemoveKey deletes one of the caller's keys, then closes its live sessions on
 // every project the caller is a member of. The row (policy) drops before the
 // live sessions, so a failure leaves the key gone rather than still authorized.

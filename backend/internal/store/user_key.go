@@ -64,6 +64,24 @@ func (s *UserStore) ListKeys(ctx context.Context, userID uint) ([]UserKey, error
 	return keys, err
 }
 
+// RenameKey changes the label of a user's key. Returns ErrNotFound if the user
+// has no such key. Scoped to userID so a user can only rename their own.
+func (s *UserStore) RenameKey(ctx context.Context, userID uint, endpointID, newLabel string) error {
+	res := s.db.WithContext(ctx).
+		Model(&UserKey{}).
+		Where("user_id = ? AND endpoint_id = ?", userID, endpointID).
+		Update("label", newLabel)
+
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
 // GetKeyByEndpoint resolves an endpoint to its owning key, or ErrNotFound. This
 // is the authz lookup: endpoint -> account, after which the caller checks
 // project membership.

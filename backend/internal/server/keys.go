@@ -22,7 +22,7 @@ func (s *Server) registerKeys(api huma.API) {
 
 	huma.Register(api, huma.Operation{
 		OperationID: "add-key", Method: http.MethodPost, Path: "/keys",
-		Summary: "Register a peer public key (EndpointId) on the caller's account",
+		Summary:       "Register a peer public key (EndpointId) on the caller's account",
 		DefaultStatus: http.StatusCreated,
 	}, s.handleAddKey)
 
@@ -30,6 +30,11 @@ func (s *Server) registerKeys(api huma.API) {
 		OperationID: "remove-key", Method: http.MethodDelete, Path: "/keys/{endpointId}",
 		Summary: "Revoke a peer key and close its live sessions", DefaultStatus: http.StatusNoContent,
 	}, s.handleRemoveKey)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "rename-key", Method: http.MethodPatch, Path: "/keys/{endpointId}",
+		Summary: "Rename a peer key",
+	}, s.handleRenameKey)
 }
 
 type keyView struct {
@@ -88,6 +93,24 @@ func (s *Server) handleRemoveKey(ctx context.Context, in *removeKeyInput) (*stru
 		return nil, err
 	}
 	if err := s.svc.Keys.RemoveKey(ctx, uid, in.EndpointID); err != nil {
+		return nil, httpError(err)
+	}
+	return nil, nil
+}
+
+type renameKeyInput struct {
+	EndpointID string `path:"endpointId"`
+	Body       struct {
+		NewLabel string `json:"newLabel" maxLength:"128"`
+	}
+}
+
+func (s *Server) handleRenameKey(ctx context.Context, in *renameKeyInput) (*struct{}, error) {
+	uid, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.svc.Keys.RenameKey(ctx, uid, in.EndpointID, in.Body.NewLabel); err != nil {
 		return nil, httpError(err)
 	}
 	return nil, nil
