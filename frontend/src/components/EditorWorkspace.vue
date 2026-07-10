@@ -27,6 +27,7 @@ import { useEditorJump } from '@/composables/useEditorJump';
 import { parseOutline } from '@/teamtype/outline';
 import TeamtypeEditor from '@/components/TeamtypeEditor.vue';
 import FileList from '@/components/FileList.vue';
+import NewFileDialog from '@/components/NewFileDialog.vue';
 import Outline from './workspace/Outline.vue';
 import PreviewPane from './workspace/PreviewPane.vue';
 import ReviewPanel, { type CommentDraft } from './workspace/ReviewPanel.vue';
@@ -68,6 +69,16 @@ const commentCount = computed(
 function startDraft(file: string, start: number, end: number, quote: string) {
   draft.value = { file, start, end, quote };
   dock.value?.getPanel('review-current')?.api.setActive();
+}
+
+// the new-file dialog is owned here, not in the FileList panel: dockview
+// mounts panels in their own subtree, so a modal raised from inside one is
+// trapped by the panel's stacking context; hoisting it keeps it above the dock
+const newFileOpen = ref(false);
+
+function addFile(path: string) {
+  okayeg.createFile(path);
+  okayeg.selectFile(path);
 }
 
 // --- dockview layouts -------------------------------------------------------
@@ -112,6 +123,7 @@ const panelComponents = markRaw({
       previewFile: okayeg.previewFile,
       onSelect: (f: string) => okayeg.selectFile(f),
       onPreview: (f: string) => okayeg.setPreviewFile(f),
+      onAdd: () => (newFileOpen.value = true),
     }),
   ),
   outline: panel(() =>
@@ -396,6 +408,13 @@ onBeforeUnmount(() => {
   <div class="workspace">
     <DockviewVue class="dock" :components="panelComponents" :theme="theme" @ready="onReady" />
   </div>
+
+  <NewFileDialog
+    :open="newFileOpen"
+    :existing="okayeg.files"
+    @close="newFileOpen = false"
+    @create="addFile"
+  />
 </template>
 
 <style scoped>
