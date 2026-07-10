@@ -14,6 +14,55 @@ const renaming = ref<string | null>(null);
 const renameLabel = ref('');
 // this browser's own endpoint id, so we can mark it and warn before self-revoke
 const thisDevice = ref<string | null>(null);
+// true while registering this browser's own key
+const registering = ref(false);
+
+// this browser's key, once derived, still absent from the registered list
+const thisDeviceUnregistered = computed(
+  () =>
+    thisDevice.value !== null &&
+    keys.loaded &&
+    !keys.keys.some((k) => k.endpoint_id === thisDevice.value),
+);
+
+// Register this browser's key without opening a project. `getId` picks the id to
+// register: the current identity, or a freshly minted one.
+async function ensureThisDevice(getId: () => Promise<string>, failure: string) {
+  error.value = null;
+  registering.value = true;
+  try {
+    const id = await getId();
+    thisDevice.value = id;
+    await keys.ensure(id, 'Browser');
+    await keys.list();
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : failure;
+  } finally {
+    registering.value = false;
+  }
+}
+
+// Derive this browser's key and register it, without having to open a project.
+function registerThisDevice() {
+  return ensureThisDevice(
+    async () => thisDevice.value ?? (await okayeg.deviceId()),
+    'Could not register this browser',
+  );
+}
+
+// Mint a fresh identity for this browser and register it. The escape hatch when
+// the current key is already claimed by another account.
+function regenerateThisDevice() {
+  if (
+    !window.confirm(
+      'Generate a new key for this browser? Sync from here uses the new key; ' +
+        'the old one stays registered until you revoke it.',
+    )
+  ) {
+    return;
+  }
+  return ensureThisDevice(okayeg.regenerateIdentity, 'Could not generate a new key');
+}
 
 // the add-a-native-key form: paste the id printed by `eg id`
 const newId = ref('');
@@ -135,6 +184,25 @@ async function commitRename(endpointId: string) {
       once.
     </p>
 
+    <div v-if="thisDeviceUnregistered" class="this-device card">
+      <div class="info">
+        <span class="name label-md">This browser is not registered yet</span>
+        <span class="meta text-xs">Register it to sync your projects from here.</span>
+      </div>
+      <div class="row">
+        <button
+          class="label-sm btn btn-sm btn-ghost"
+          :disabled="registering"
+          @click="regenerateThisDevice"
+        >
+          Generate new key
+        </button>
+        <button class="label-sm btn btn-sm" :disabled="registering" @click="registerThisDevice">
+          {{ registering ? 'Registering...' : 'Register this browser' }}
+        </button>
+      </div>
+    </div>
+
     <form class="add card" @submit.prevent="addKey">
       <div class="add-fields">
         <input
@@ -162,7 +230,7 @@ async function commitRename(endpointId: string) {
     <p v-if="!keys.loaded" class="state text-sm">Loading...</p>
 
     <p v-else-if="keys.keys.length === 0" class="state text-sm">
-      No keys registered yet. Open a project to register this browser.
+      No keys registered yet. Register this browser above, or open a project.
     </p>
 
     <ul v-else class="list">
@@ -239,6 +307,11 @@ header {
 .error {
   margin-top: var(--space-4);
   color: var(--color-error);
+}
+
+.this-device {
+  margin-top: var(--space-6);
+  justify-content: space-between;
 }
 
 .add {

@@ -70,7 +70,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("authz socket: %v", err)
 	}
-	authzSrv := &http.Server{Handler: server.NewAuthzHandler(svc)}
+	authzSrv := &http.Server{Handler: server.NewAuthzHandler(svc, cfg.PublicURL)}
 	go func() {
 		if err := authzSrv.Serve(authzLn); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("authz server: %v", err)

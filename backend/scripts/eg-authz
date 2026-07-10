@@ -5,8 +5,21 @@
 #   eg-authz <socket> <project-id>
 #
 # It forwards the decision to the fossencd backend over its authz unix socket.
-# curl -f exits nonzero on the backend's 403, which eg reads as a refusal, so
-# a missing socket or a down backend also fails closed.
+# A 200 grants: its body ("pull push") is the verdict. A 403 refuses: eg reads
+# any non-grant first line as a refusal, so we print "deny" then the backend's
+# reason body, which eg relays to the dialer. A connection failure (down backend,
+# missing socket) exits nonzero, which eg also reads as a refusal, so the gate
+# fails closed.
 set -eu
 read -r peer || exit 1
-exec curl -sf --unix-socket "$1" "http://authz/projects/$2/peers/$peer"
+
+body=$(mktemp)
+trap 'rm -f "$body"' EXIT
+code=$(curl -s -o "$body" -w '%{http_code}' --unix-socket "$1" "http://authz/projects/$2/peers/$peer") || exit 1
+
+if [ "$code" = "200" ]; then
+	cat "$body"
+else
+	printf 'deny\n'
+	cat "$body"
+fi

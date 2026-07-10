@@ -7,7 +7,7 @@ import initOkayeg, {
 import wasmUrl from '@sandvichxyz/okayeg-wasm/wasm-url';
 
 import { applyWireDelta } from '@/teamtype/collab';
-import { loadOrCreateSeed } from '@/identity';
+import { loadOrCreateSeed, regenerateSeed } from '@/identity';
 import { VirtualFs } from '@/vfs';
 
 type ContentListener = (file: string, text: string) => void;
@@ -269,6 +269,17 @@ export const useOkayegStore = defineStore('okayeg', () => {
     return id;
   }
 
+  /**
+   * Mint a fresh identity for this browser: tear down any live peer, replace the
+   * persisted seed, and return the new endpoint id. Used to escape a key already
+   * claimed by another account.
+   */
+  async function regenerateIdentity(): Promise<string> {
+    reset();
+    await regenerateSeed();
+    return deviceId();
+  }
+
   return {
     vfs,
     ready,
@@ -285,6 +296,7 @@ export const useOkayegStore = defineStore('okayeg', () => {
     reset,
     connect,
     deviceId,
+    regenerateIdentity,
     selectFile,
     setPreviewFile,
     read,

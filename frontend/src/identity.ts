@@ -48,7 +48,20 @@ export async function loadOrCreateSeed(): Promise<{ seed: Uint8Array; fresh: boo
   if (existing) {
     return { seed: existing, fresh: false };
   }
+  return { seed: await mintSeed(), fresh: true };
+}
+
+/**
+ * Discard the stored identity and mint a fresh 32-byte seed, giving this browser
+ * a new endpoint id. Used to escape a key that is already claimed by another
+ * account; the old public key remains a stale entry to prune in settings.
+ */
+export async function regenerateSeed(): Promise<Uint8Array> {
+  return mintSeed();
+}
+
+async function mintSeed(): Promise<Uint8Array> {
   const seed = crypto.getRandomValues(new Uint8Array(32));
   await tx('readwrite', (s) => s.put(seed, SEED_KEY));
-  return { seed, fresh: true };
+  return seed;
 }

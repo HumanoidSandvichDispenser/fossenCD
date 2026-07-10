@@ -240,24 +240,24 @@ func TestAuthorizePeerThroughMembership(t *testing.T) {
 	_ = svc.Keys.AddKey(ctx, b, endpointBob, "")
 
 	// alice owns the project: her key is authorized
-	if ok, err := svc.Projects.AuthorizePeer(ctx, p.ID, endpointAlice); err != nil || !ok {
-		t.Fatalf("alice: ok=%v err=%v, want authorized", ok, err)
+	if v, err := svc.Projects.AuthorizePeer(ctx, p.ID, endpointAlice); err != nil || v != PeerGranted {
+		t.Fatalf("alice: verdict=%v err=%v, want granted", v, err)
 	}
-	// bob has a key but isn't a member: refused
-	if ok, _ := svc.Projects.AuthorizePeer(ctx, p.ID, endpointBob); ok {
-		t.Fatal("bob authorized without membership")
+	// bob has a key but isn't a member: refused as a non-member
+	if v, _ := svc.Projects.AuthorizePeer(ctx, p.ID, endpointBob); v != PeerNotMember {
+		t.Fatalf("bob: verdict=%v, want not-member", v)
 	}
-	// unknown endpoint: refused
-	if ok, _ := svc.Projects.AuthorizePeer(ctx, p.ID, endpointCarol); ok {
-		t.Fatal("unregistered endpoint authorized")
+	// unknown endpoint: refused as unregistered
+	if v, _ := svc.Projects.AuthorizePeer(ctx, p.ID, endpointCarol); v != PeerUnregistered {
+		t.Fatalf("carol: verdict=%v, want unregistered", v)
 	}
 
 	// once bob joins, his key is authorized
 	if err := svc.Projects.AddMember(ctx, a, p.ID, "bob"); err != nil {
 		t.Fatal(err)
 	}
-	if ok, err := svc.Projects.AuthorizePeer(ctx, p.ID, endpointBob); err != nil || !ok {
-		t.Fatalf("bob after join: ok=%v err=%v, want authorized", ok, err)
+	if v, err := svc.Projects.AuthorizePeer(ctx, p.ID, endpointBob); err != nil || v != PeerGranted {
+		t.Fatalf("bob after join: verdict=%v err=%v, want granted", v, err)
 	}
 }
 
