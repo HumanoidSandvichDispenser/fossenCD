@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 
 import EditorView from '@/views/EditorView.vue';
+import EnrollView from '@/views/EnrollView.vue';
 import LoginView from '@/views/LoginView.vue';
 import ProjectsView from '@/views/ProjectsView.vue';
 import SettingsView from '@/views/SettingsView.vue';
@@ -29,6 +30,12 @@ const router = createRouter({
       path: '/settings',
       name: 'settings',
       component: SettingsView,
+      meta: { requiresAuth: true, chrome: true },
+    },
+    {
+      path: '/enroll',
+      name: 'enroll',
+      component: EnrollView,
       meta: { requiresAuth: true, chrome: true },
     },
     {
