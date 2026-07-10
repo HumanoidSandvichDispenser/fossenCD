@@ -20,10 +20,20 @@ export default defineConfig({
   // The modern build target and dev server support both natively.
   plugins: [vue(), vueDevTools(), wasm()],
   resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-      ...(okayegWasmLocal ? { '@sandvichxyz/okayeg-wasm': okayegWasmLocal } : {}),
-    },
+    alias: [
+      { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
+      ...(okayegWasmLocal
+        ? [
+            // A local wasm-pack pkg has the flat layout and no wasm-url
+            // module, so route the subpath import straight at the binary.
+            {
+              find: '@sandvichxyz/okayeg-wasm/wasm-url',
+              replacement: `${okayegWasmLocal}/okayeg_wasm_bg.wasm?url`,
+            },
+            { find: '@sandvichxyz/okayeg-wasm', replacement: okayegWasmLocal },
+          ]
+        : []),
+    ],
   },
   optimizeDeps: {
     // a published wasm pkg: keep it out of the pre-bundle so `?url` and the

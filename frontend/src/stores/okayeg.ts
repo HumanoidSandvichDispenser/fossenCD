@@ -4,7 +4,7 @@ import initOkayeg, {
   OkayegClient,
   type WireDelta,
 } from '@sandvichxyz/okayeg-wasm';
-import wasmUrl from '@sandvichxyz/okayeg-wasm/okayeg_wasm_bg.wasm?url';
+import wasmUrl from '@sandvichxyz/okayeg-wasm/wasm-url';
 
 import { applyWireDelta } from '@/teamtype/collab';
 import { loadOrCreateSeed } from '@/identity';

@@ -15,7 +15,7 @@
         "@myriaddreamin/typst-ts-web-compiler": "^0.7.0",
         "@myriaddreamin/typst.ts": "^0.7.0",
         "@phosphor-icons/vue": "^2.2.1",
-        "@sandvichxyz/okayeg-wasm": "0.1.0-1",
+        "@sandvichxyz/okayeg-wasm": "npm:@jsr/sandvichxyz__okayeg-wasm@0.1.0-3",
         "codemirror-lang-typst": "^0.4.0",
         "dockview-vue": "^7.0.2",
         "pinia": "^3.0.4",
@@ -360,7 +360,7 @@
 
     "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.1", "", {}, "sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw=="],
 
-    "@sandvichxyz/okayeg-wasm": ["@sandvichxyz/okayeg-wasm@0.1.0-1", "", {}, "sha512-d+ISVwHuXepZ6Kc3xfhyYChrl0c+SwewK1jiy+4NryX18XIu33quF22k5zFse7uG4C4tO555zZorec5Hl7xneA=="],
+    "@sandvichxyz/okayeg-wasm": ["@jsr/sandvichxyz__okayeg-wasm@0.1.0-3", "https://npm.jsr.io/~/11/@jsr/sandvichxyz__okayeg-wasm/0.1.0-3.tgz", {}, "sha512-vnyz4dmF+b5SKx6mTpWWFyB1YWSDguNy0PJQXBGaTTUJWxXzv/WTtfnXc68yuHKO+l6ke13S+0Zyo5hgt9TJHQ=="],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 

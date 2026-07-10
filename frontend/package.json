@@ -28,7 +28,7 @@
     "@myriaddreamin/typst-ts-web-compiler": "^0.7.0",
     "@myriaddreamin/typst.ts": "^0.7.0",
     "@phosphor-icons/vue": "^2.2.1",
-    "@sandvichxyz/okayeg-wasm": "0.1.0-1",
+    "@sandvichxyz/okayeg-wasm": "npm:@jsr/sandvichxyz__okayeg-wasm@0.1.0-3",
     "codemirror-lang-typst": "^0.4.0",
     "dockview-vue": "^7.0.2",
     "pinia": "^3.0.4",
