@@ -79,6 +79,33 @@ export const editorTheme = EditorView.theme(
     '.cm-comment-add:hover': {
       backgroundColor: 'var(--color-surface-hover)',
     },
+    // peer selection background is set inline per-peer; this is just shape
+    '.cm-peer-selection': {
+      borderRadius: '2px',
+    },
+    // a zero-width caret drawn as a colored left border, color set inline
+    '.cm-peer-caret': {
+      display: 'inline-block',
+      width: '0',
+      height: '1.2em',
+      marginLeft: '-1px',
+      borderLeft: '2px solid',
+      position: 'relative',
+      verticalAlign: 'text-top',
+    },
+    '.cm-peer-caret-label': {
+      position: 'absolute',
+      top: '-1.15em',
+      left: '-1px',
+      padding: '1px 3px',
+      fontSize: '10px',
+      lineHeight: '1',
+      color: 'white',
+      borderRadius: '3px',
+      whiteSpace: 'nowrap',
+      pointerEvents: 'none',
+      userSelect: 'none',
+    },
   },
   { dark: false },
 );

@@ -13,7 +13,7 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { lintGutter, setDiagnostics } from '@codemirror/lint';
 
 import { useOkayegStore } from '@/stores/okayeg';
-import { collab } from '@/teamtype/collab';
+import { collab, remoteEdit } from '@/teamtype/collab';
 import {
   comments as commentsExtension,
   setActiveComment,
@@ -22,6 +22,7 @@ import {
   type CommentSpan,
   type EditorViewport,
 } from '@/teamtype/comments';
+import { peerCursors, setPeerCursors, type PeerCursorSpan } from '@/teamtype/peer-cursors';
 import { advanceCodePoints, codePointLength } from '@/teamtype/codepoints';
 import { editorPresentation, languageForFile } from '@/teamtype/editor-theme';
 import { toEditorDiagnostics } from '@/teamtype/editor-diagnostics';
@@ -79,9 +80,14 @@ function makeState(file: string | null, doc: string): EditorState {
           }
         },
       }),
+      peerCursors(),
       EditorView.updateListener.of((update) => {
         if (update.docChanged || update.geometryChanged) {
           scheduleAnchors();
+        }
+        // publish our caret whenever the selection or the doc moves it
+        if (update.selectionSet || update.docChanged) {
+          scheduleSendCursor();
         }
       }),
       commentsExtension({
@@ -185,6 +191,58 @@ function scheduleViewport() {
   viewportFrame = requestAnimationFrame(emitViewport);
 }
 
+// Publish this peer's caret/selection, converted from the editor's UTF-16
+// offsets to the code point positions okayeg anchors on. Coalesced so a burst
+// of cursor moves sends one frame per animation frame.
+function sendCursor() {
+  const file = okayeg.currentFile;
+  if (!view || !file) {
+    return;
+  }
+  const { anchor, head } = view.state.selection.main;
+  const doc = view.state.doc;
+  okayeg.setCursor(
+    file,
+    codePointLength(doc.sliceString(0, anchor)),
+    codePointLength(doc.sliceString(0, head)),
+  );
+}
+
+let cursorFrame = 0;
+function scheduleSendCursor() {
+  cancelAnimationFrame(cursorFrame);
+  cursorFrame = requestAnimationFrame(sendCursor);
+}
+
+// Push every peer's cursor for the open file into the editor, dropping our own
+// and converting code point positions to UTF-16 offsets against the buffer.
+function pushPeerCursors() {
+  if (!view) {
+    return;
+  }
+  const file = okayeg.currentFile;
+  const text = view.state.doc.toString();
+  const spans: PeerCursorSpan[] = [];
+  if (file) {
+    for (const [id, cursor] of Object.entries(okayeg.cursors)) {
+      if (id === okayeg.nodeId || cursor.file !== file) {
+        continue;
+      }
+      const anchor = advanceCodePoints(text, 0, cursor.anchor);
+      const head = advanceCodePoints(text, 0, cursor.head);
+      const peer = okayeg.peers[id];
+      spans.push({
+        id,
+        name: typeof peer?.name === 'string' ? peer.name : null,
+        from: Math.min(anchor, head),
+        to: Math.max(anchor, head),
+        head,
+      });
+    }
+  }
+  view.dispatch({ effects: setPeerCursors.of(spans) });
+}
+
 /** Scroll the editor by `delta` pixels; the review pane forwards its wheel here. */
 function scrollBy(delta: number) {
   view?.scrollDOM.scrollBy({ top: delta });
@@ -200,6 +258,38 @@ function showState(state: EditorState) {
     return;
   }
   view.setState(state);
+}
+
+/**
+ * Reconcile the open buffer to a remote snapshot as a minimal single-range
+ * edit, so the local selection, scroll, and history survive (a full setState
+ * reseed would reset the caret to the document start). Marked `remoteEdit` so
+ * the collab extension does not echo it back. Assumes the snapshot differs.
+ */
+function reconcileText(text: string) {
+  if (!view) {
+    return;
+  }
+  const cur = view.state.doc.toString();
+  // common prefix / suffix bound the changed region; the rest maps through
+  let p = 0;
+  const maxP = Math.min(cur.length, text.length);
+  while (p < maxP && cur.charCodeAt(p) === text.charCodeAt(p)) {
+    p++;
+  }
+  // don't split a surrogate pair the two strings still share
+  if (p > 0 && p < cur.length && cur.charCodeAt(p - 1) >= 0xd800 && cur.charCodeAt(p - 1) <= 0xdbff) {
+    p--;
+  }
+  let s = 0;
+  const maxS = Math.min(cur.length - p, text.length - p);
+  while (s < maxS && cur.charCodeAt(cur.length - 1 - s) === text.charCodeAt(text.length - 1 - s)) {
+    s++;
+  }
+  view.dispatch({
+    changes: { from: p, to: cur.length - s, insert: text.slice(p, text.length - s) },
+    annotations: remoteEdit.of(true),
+  });
 }
 
 // Replace the editor's inline markers with the current file's diagnostics.
@@ -225,6 +315,7 @@ onMounted(() => {
   });
   pushDiagnostics();
   pushComments();
+  pushPeerCursors();
 
   // scrolling only shifts the document-to-screen mapping, not the anchors
   // themselves; the scroller element survives setState, so one listener
@@ -234,6 +325,7 @@ onMounted(() => {
     view?.scrollDOM.removeEventListener('scroll', scheduleViewport);
     cancelAnimationFrame(anchorFrame);
     cancelAnimationFrame(viewportFrame);
+    cancelAnimationFrame(cursorFrame);
   });
 
   // Remote edits arrive as full snapshots via onContent (pass-1 okayeg-wasm
@@ -247,13 +339,17 @@ onMounted(() => {
       }
 
       if (view.state.doc.toString() !== text) {
-        showState(makeState(file, text));
+        reconcileText(text);
         pushDiagnostics();
         pushComments();
+        pushPeerCursors();
       }
     }),
   );
 });
+
+// re-render peer carets whenever a cursor tick re-resolves them
+watch(() => okayeg.cursors, pushPeerCursors, { deep: true });
 
 // re-highlight whenever anchors re-resolve (every change tick) or the active
 // thread changes
@@ -300,6 +396,7 @@ watch(() => okayeg.currentFile, (file, prev) => {
   showState(cached && cached.doc.toString() === text ? cached : makeState(file, text));
   pushDiagnostics();
   pushComments();
+  pushPeerCursors();
 });
 
 // re-render markers when a new compile reports diagnostics for the open file

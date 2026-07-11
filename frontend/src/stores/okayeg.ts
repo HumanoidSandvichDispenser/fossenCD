@@ -41,6 +41,18 @@ interface Identity {
 /** One peer's presence entry: consumer fields, `name`/`email` by convention. */
 export type PresenceEntry = Record<string, unknown>;
 
+/**
+ * One peer's live cursor as reflected by okayeg-wasm's onCursor: the file it is
+ * in and the anchor/head positions (Unicode code points, half-open), resolved
+ * against this peer's own doc. `orphaned` when the anchored text was deleted.
+ */
+export interface PeerCursor {
+  file: string;
+  anchor: number;
+  head: number;
+  orphaned: boolean;
+}
+
 function isTypst(file: string): boolean {
   return file.toLowerCase().endsWith('.typ');
 }
@@ -73,6 +85,9 @@ export const useOkayegStore = defineStore('okayeg', () => {
   // every live presence entry keyed by peer endpoint id, this peer included;
   // entries appear as peers join and expire when they leave
   const peers = reactive<Record<string, PresenceEntry>>({});
+  // every live peer cursor keyed by peer endpoint id, this peer included;
+  // re-resolved on every presence change and every doc change
+  const cursors = reactive<Record<string, PeerCursor>>({});
 
   /**
    * Merge a presence snapshot into {@link peers} in place; a write of an
@@ -98,6 +113,18 @@ export const useOkayegStore = defineStore('okayeg', () => {
         }
       }
       Object.assign(current, entry);
+    }
+  }
+
+  /** Merge a cursor snapshot into {@link cursors} in place. */
+  function reconcileCursors(all: Record<string, PeerCursor>) {
+    for (const id of Object.keys(cursors)) {
+      if (!(id in all)) {
+        delete cursors[id];
+      }
+    }
+    for (const [id, cursor] of Object.entries(all)) {
+      cursors[id] = cursor;
     }
   }
 
@@ -179,6 +206,7 @@ export const useOkayegStore = defineStore('okayeg', () => {
       comments.value = all;
     });
     c.onPresence(reconcilePeers);
+    c.onCursor(reconcileCursors);
     c.onDisconnect((reason: string) => {
       connected.value = false;
       lastDisconnect.value = reason;
@@ -222,6 +250,7 @@ export const useOkayegStore = defineStore('okayeg', () => {
     comments.value = [];
     activeCommentId.value = null;
     reconcilePeers({});
+    reconcileCursors({});
   }
 
   function subscribe<T>(set: Set<T>, listener: T): () => void {
@@ -313,6 +342,20 @@ export const useOkayegStore = defineStore('okayeg', () => {
   }
 
   /**
+   * Publish this peer's cursor: anchor/head positions (Unicode code points,
+   * half-open) in `file`. Peers resolve it against their own doc, so it tracks
+   * concurrent edits without transformation.
+   */
+  function setCursor(file: string, anchor: number, head: number): boolean {
+    return client?.setCursor(file, anchor, head) ?? false;
+  }
+
+  /** Drop this peer's cursor (e.g. on blur). */
+  function clearCursor() {
+    client?.clearCursor();
+  }
+
+  /**
    * This browser's peer id (hex EndpointId), derived from the persisted seed
    * without touching the live client. Returns the running peer's id when one is
    * up; otherwise spins a throwaway client just to read it and frees it again.
@@ -356,6 +399,7 @@ export const useOkayegStore = defineStore('okayeg', () => {
     comments,
     activeCommentId,
     peers,
+    cursors,
     start,
     reset,
     connect,
@@ -373,6 +417,8 @@ export const useOkayegStore = defineStore('okayeg', () => {
     setComment,
     removeComment,
     setActiveComment,
+    setCursor,
+    clearCursor,
     onContent: (listener: ContentListener) => subscribe(contentListeners, listener),
   };
 });
