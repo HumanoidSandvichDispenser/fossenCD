@@ -19,7 +19,6 @@ type ProjectService struct {
 	host          okayeg.Host
 	authzScript   string
 	authzSocket   string
-	sessionScript string
 }
 
 func (s *ProjectService) Create(ctx context.Context, ownerID uint, name string) (store.Project, error) {
@@ -45,18 +44,14 @@ func (s *ProjectService) Create(ctx context.Context, ownerID uint, name string) 
 
 // writeAuthzConfig writes the project's .eg/config.toml naming the authz
 // command eg runs per connection (the script, the backend's authz socket, and
-// the project id) and the session command it runs per peer join/leave. No-op
-// when no authz script is configured (eg then uses .eg/trust).
+// the project id). No-op when no authz script is configured (eg then uses
+// .eg/trust).
 func (s *ProjectService) writeAuthzConfig(projectID string) error {
 	if s.authzScript == "" {
 		return nil
 	}
 	authz := []string{s.authzScript, s.authzSocket, projectID}
-	var session []string
-	if s.sessionScript != "" {
-		session = []string{s.sessionScript, s.authzSocket, projectID}
-	}
-	return okayeg.WriteAuthzConfig(s.fs, s.shareDir(projectID), authz, session)
+	return okayeg.WriteAuthzConfig(s.fs, s.shareDir(projectID), authz)
 }
 
 // PeerAuthz is the outcome of an authz check.

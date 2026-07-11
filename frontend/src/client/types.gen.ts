@@ -146,11 +146,13 @@ export type MemberView = {
     username: string;
 };
 
-export type PeerView = {
+export type PeerClaim = {
     email: string;
     endpoint_id: string;
-    joined_at: string;
-    name: string;
+};
+
+export type PeerVerdict = {
+    endpoint_id: string;
     username: string;
     verified: boolean;
 };
@@ -191,6 +193,14 @@ export type UserView = {
     email: string;
     id: number;
     username: string;
+};
+
+export type VerifyPeersInputBody = {
+    /**
+     * A URL to the JSON Schema for this object.
+     */
+    readonly $schema?: string;
+    claims: Array<PeerClaim> | null;
 };
 
 export type AddEmailInputBodyWritable = {
@@ -271,6 +281,10 @@ export type UserViewWritable = {
     email: string;
     id: number;
     username: string;
+};
+
+export type VerifyPeersInputBodyWritable = {
+    claims: Array<PeerClaim> | null;
 };
 
 export type LoginData = {
@@ -790,29 +804,29 @@ export type RemoveMemberResponses = {
 
 export type RemoveMemberResponse = RemoveMemberResponses[keyof RemoveMemberResponses];
 
-export type ProjectPeersData = {
-    body?: never;
+export type VerifyPeersData = {
+    body: VerifyPeersInputBodyWritable;
     path: {
         id: string;
     };
     query?: never;
-    url: '/projects/{id}/peers';
+    url: '/projects/{id}/peers/verify';
 };
 
-export type ProjectPeersErrors = {
+export type VerifyPeersErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type ProjectPeersError = ProjectPeersErrors[keyof ProjectPeersErrors];
+export type VerifyPeersError = VerifyPeersErrors[keyof VerifyPeersErrors];
 
-export type ProjectPeersResponses = {
+export type VerifyPeersResponses = {
     /**
      * OK
      */
-    200: Array<PeerView> | null;
+    200: Array<PeerVerdict> | null;
 };
 
-export type ProjectPeersResponse = ProjectPeersResponses[keyof ProjectPeersResponses];
+export type VerifyPeersResponse = VerifyPeersResponses[keyof VerifyPeersResponses];

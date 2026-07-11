@@ -165,8 +165,7 @@ func TestCreateProjectWritesAuthzConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read config.toml: %v", err)
 	}
-	want := "[authz]\ncommand = [\"/app/scripts/eg-authz\", \"/data/authz.sock\", \"" + p.ID + "\"]\n" +
-		"[session]\ncommand = [\"/app/scripts/eg-session\", \"/data/authz.sock\", \"" + p.ID + "\"]\n"
+	want := "[authz]\ncommand = [\"/app/scripts/eg-authz\", \"/data/authz.sock\", \"" + p.ID + "\"]\n"
 	if string(raw) != want {
 		t.Fatalf("config.toml = %q, want %q", raw, want)
 	}

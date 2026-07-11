@@ -8,7 +8,10 @@
 
     // Path mapping for cleaner imports.
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      // a locally built okayeg-wasm's types when the checkout is present;
+      // TypeScript falls back to the installed package otherwise
+      "@sandvichxyz/okayeg-wasm": ["../../okayeg/crates/okayeg-wasm/pkg/okayeg_wasm.d.ts"]
     },
 
     // `vue-tsc --build` produces a .tsbuildinfo file for incremental type-checking.

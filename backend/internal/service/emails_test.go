@@ -113,34 +113,3 @@ func TestVerifyClaimMatchesEndpointOwnersVerifiedSet(t *testing.T) {
 		t.Fatalf("expected unverified claim for unknown endpoint, got %+v %v", claim, err)
 	}
 }
-
-func TestPresenceTracksSessions(t *testing.T) {
-	p := NewPresence()
-
-	p.Hello("proj", Peer{EndpointID: "aa", Name: "alice"})
-	p.Hello("proj", Peer{EndpointID: "bb", Name: "bob"})
-	p.Hello("proj", Peer{EndpointID: "aa", Name: "alice2"}) // second session, new claim
-
-	peers := p.Peers("proj")
-	if len(peers) != 2 {
-		t.Fatalf("expected 2 peers, got %+v", peers)
-	}
-	if peers[0].Name != "alice2" {
-		t.Fatalf("expected the newest claim to win, got %+v", peers[0])
-	}
-
-	// one of alice's two sessions ends; she stays listed
-	p.Bye("proj", "aa")
-	if len(p.Peers("proj")) != 2 {
-		t.Fatalf("expected alice to stay while a session remains")
-	}
-
-	p.Bye("proj", "aa")
-	p.Bye("proj", "bb")
-	if len(p.Peers("proj")) != 0 {
-		t.Fatalf("expected empty presence, got %+v", p.Peers("proj"))
-	}
-
-	// a bye for an unknown peer is a no-op
-	p.Bye("proj", "zz")
-}

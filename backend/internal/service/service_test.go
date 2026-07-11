@@ -34,8 +34,6 @@ func newServices(t *testing.T) *Services {
 		Host:        &noopHost{},
 		AuthzScript: "/app/scripts/eg-authz",
 		AuthzSocket: "/data/authz.sock",
-
-		SessionScript: "/app/scripts/eg-session",
 	})
 }
 

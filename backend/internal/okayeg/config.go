@@ -13,40 +13,23 @@ import (
 const configRelPath = ".eg/config.toml"
 
 // WriteAuthzConfig writes .eg/config.toml pointing eg's connection gate at an
-// authz command, and its session hook at a session command when one is given.
-// eg runs the authz argv for each incoming connection, writes the peer's
-// endpoint id to its stdin, and reads "pull"/"push" from its stdout; a nonzero
-// exit refuses the peer. The session argv runs per peer join and leave with
-// the event, endpoint id, and claimed name and email on stdin; it decides
-// nothing.
-func WriteAuthzConfig(fs afero.Fs, baseDir string, authz, session []string) error {
+// authz command. eg runs the argv for each incoming connection, writes the
+// peer's endpoint id to its stdin, and reads "pull"/"push" from its stdout; a
+// nonzero exit refuses the peer.
+func WriteAuthzConfig(fs afero.Fs, baseDir string, authz []string) error {
 	if len(authz) == 0 {
 		return fmt.Errorf("okayeg: authz command must name a program")
 	}
 
-	table := func(name string, argv []string) (string, error) {
-		quoted := make([]string, len(argv))
-		for i, arg := range argv {
-			q, err := tomlString(arg)
-			if err != nil {
-				return "", err
-			}
-			quoted[i] = q
-		}
-		return fmt.Sprintf("[%s]\ncommand = [%s]\n", name, strings.Join(quoted, ", ")), nil
-	}
-
-	text, err := table("authz", authz)
-	if err != nil {
-		return err
-	}
-	if len(session) > 0 {
-		hook, err := table("session", session)
+	quoted := make([]string, len(authz))
+	for i, arg := range authz {
+		q, err := tomlString(arg)
 		if err != nil {
 			return err
 		}
-		text += hook
+		quoted[i] = q
 	}
+	text := fmt.Sprintf("[authz]\ncommand = [%s]\n", strings.Join(quoted, ", "))
 
 	if err := fs.MkdirAll(filepath.Join(baseDir, egDir), 0o700); err != nil {
 		return err

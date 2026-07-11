@@ -67,42 +67,54 @@ func (s *Server) registerProjects(api huma.API) {
 	}, s.handleProjectLogs)
 
 	huma.Register(api, huma.Operation{
-		OperationID: "project-peers", Method: http.MethodGet, Path: "/projects/{id}/peers",
-		Summary: "List the project's live peers with their claimed identities",
-	}, s.handleProjectPeers)
+		OperationID: "verify-peers", Method: http.MethodPost, Path: "/projects/{id}/peers/verify",
+		Summary: "Check peers' claimed emails against their keys' owning accounts",
+	}, s.handleVerifyPeers)
 }
 
-type peerView struct {
-	EndpointID string    `json:"endpoint_id"`
-	Name       string    `json:"name"`
-	Email      string    `json:"email"`
-	Verified   bool      `json:"verified"`
-	Username   string    `json:"username"`
-	JoinedAt   time.Time `json:"joined_at"`
+// peerClaim is one peer as its presence entry shows it: the endpoint id the
+// peer connected with and the email it claims, blank when it claims none.
+type peerClaim struct {
+	EndpointID string `json:"endpoint_id" minLength:"1"`
+	Email      string `json:"email"`
 }
 
-type peersOutput struct{ Body []peerView }
+type peerVerdict struct {
+	EndpointID string `json:"endpoint_id"`
+	Verified   bool   `json:"verified"`
+	// Username of the account the claimed email verified against.
+	Username string `json:"username"`
+}
 
-func (s *Server) handleProjectPeers(ctx context.Context, in *idInput) (*peersOutput, error) {
+type verifyPeersInput struct {
+	ID   string `path:"id"`
+	Body struct {
+		Claims []peerClaim `json:"claims" maxItems:"128"`
+	}
+}
+
+type verifyPeersOutput struct{ Body []peerVerdict }
+
+func (s *Server) handleVerifyPeers(ctx context.Context, in *verifyPeersInput) (*verifyPeersOutput, error) {
 	uid, err := requireUser(ctx)
 	if err != nil {
 		return nil, err
 	}
-	// membership gate; the peer list itself lives in memory
+	// membership gate; the claims themselves came to the caller over presence
 	if _, err := s.svc.Projects.Get(ctx, uid, in.ID); err != nil {
 		return nil, httpError(err)
 	}
 
-	peers := s.svc.Presence.Peers(in.ID)
-	out := &peersOutput{Body: make([]peerView, 0, len(peers))}
-	for _, p := range peers {
-		out.Body = append(out.Body, peerView{
-			EndpointID: p.EndpointID,
-			Name:       p.Name,
-			Email:      p.Email,
-			Verified:   p.Verified,
-			Username:   p.Username,
-			JoinedAt:   p.JoinedAt,
+	out := &verifyPeersOutput{Body: make([]peerVerdict, 0, len(in.Body.Claims))}
+	for _, c := range in.Body.Claims {
+		claim, err := s.svc.Emails.VerifyClaim(ctx, c.EndpointID, c.Email)
+		if err != nil {
+			return nil, httpError(err)
+		}
+		out.Body = append(out.Body, peerVerdict{
+			EndpointID: c.EndpointID,
+			Verified:   claim.Verified,
+			Username:   claim.Username,
 		})
 	}
 	return out, nil

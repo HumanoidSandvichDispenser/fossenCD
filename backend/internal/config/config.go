@@ -13,7 +13,6 @@ type Config struct {
 	EgBin       string // okayeg `eg` daemon binary (on PATH or absolute)
 	AuthzScript   string // hook script eg runs per incoming connection
 	AuthzSocket   string // unix socket the script queries; empty derives <DataDir>/authz.sock
-	SessionScript string // hook script eg runs per peer join/leave
 	PublicURL     string // frontend base URL for user-facing links
 }
 
@@ -26,7 +25,6 @@ func Load() Config {
 		EgBin:       env("FOSSENCD_EG_BIN", "eg"),
 		AuthzScript:   env("FOSSENCD_AUTHZ_SCRIPT", "scripts/eg-authz"),
 		AuthzSocket:   env("FOSSENCD_AUTHZ_SOCKET", ""),
-		SessionScript: env("FOSSENCD_SESSION_SCRIPT", "scripts/eg-session"),
 		PublicURL:     strings.TrimRight(env("FOSSENCD_PUBLIC_URL", ""), "/"),
 	}
 }

@@ -32,11 +32,14 @@ export interface CommentFields {
   quote?: string;
 }
 
-/** The name/email this peer claims in the hello frame. Display only. */
+/** The name/email this peer claims in its presence entry. Display only. */
 interface Identity {
   name: string | null;
   email: string | null;
 }
+
+/** One peer's presence entry: consumer fields, `name`/`email` by convention. */
+export type PresenceEntry = Record<string, unknown>;
 
 function isTypst(file: string): boolean {
   return file.toLowerCase().endsWith('.typ');
@@ -67,6 +70,9 @@ export const useOkayegStore = defineStore('okayeg', () => {
   const comments = ref<OkayegComment[]>([]);
   // the thread highlighted in both the editor and the comments panel
   const activeCommentId = ref<string | null>(null);
+  // every live presence entry keyed by peer endpoint id, this peer included;
+  // entries appear as peers join and expire when they leave
+  const peers = ref<Record<string, PresenceEntry>>({});
 
   const contentListeners = new Set<ContentListener>();
 
@@ -76,12 +82,24 @@ export const useOkayegStore = defineStore('okayeg', () => {
   let identity: Identity = { name: null, email: null };
 
   /**
-   * Set the name/email this peer claims to hosts it connects to. Applies to the
-   * live client at once and to every client started after.
+   * Set the name/email this peer claims in its presence entry, shown in other
+   * peers' participant lists. Applies to the live client at once and to every
+   * client started after.
    */
   function setIdentity(name: string | null, email: string | null) {
     identity = { name, email };
-    client?.setIdentity(name, email);
+    client?.setPresence(presenceFields(identity));
+  }
+
+  function presenceFields(id: Identity): Record<string, string> {
+    const fields: Record<string, string> = {};
+    if (id.name) {
+      fields.name = id.name;
+    }
+    if (id.email) {
+      fields.email = id.email;
+    }
+    return fields;
   }
 
   async function start() {
@@ -95,7 +113,6 @@ export const useOkayegStore = defineStore('okayeg', () => {
     const { seed } = await loadOrCreateSeed();
     const c = OkayegClient.withSeed(seed);
     client = c;
-    c.setIdentity(identity.name, identity.email);
 
     c.onLog((message: string) => {
       logs.value.push(message);
@@ -134,11 +151,15 @@ export const useOkayegStore = defineStore('okayeg', () => {
     c.onComments((all: OkayegComment[]) => {
       comments.value = all;
     });
+    c.onPresence((all: Record<string, PresenceEntry>) => {
+      peers.value = all;
+    });
     c.onDisconnect((reason: string) => {
       connected.value = false;
       lastDisconnect.value = reason;
     });
 
+    c.setPresence(presenceFields(identity));
     nodeId.value = c.nodeId();
     ready.value = true;
   }
@@ -175,6 +196,7 @@ export const useOkayegStore = defineStore('okayeg', () => {
     logs.value = [];
     comments.value = [];
     activeCommentId.value = null;
+    peers.value = {};
   }
 
   function subscribe<T>(set: Set<T>, listener: T): () => void {
@@ -308,6 +330,7 @@ export const useOkayegStore = defineStore('okayeg', () => {
     lastDisconnect,
     comments,
     activeCommentId,
+    peers,
     start,
     reset,
     connect,
