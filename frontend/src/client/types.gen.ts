@@ -4,6 +4,14 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}/api` | (string & {});
 };
 
+export type AddEmailInputBody = {
+    /**
+     * A URL to the JSON Schema for this object.
+     */
+    readonly $schema?: string;
+    email: string;
+};
+
 export type AddKeyInputBody = {
     /**
      * A URL to the JSON Schema for this object.
@@ -44,6 +52,13 @@ export type CreateProjectInputBody = {
      */
     readonly $schema?: string;
     name: string;
+};
+
+export type EmailView = {
+    created_at: string;
+    email: string;
+    primary: boolean;
+    verified: boolean;
 };
 
 export type EndpointBody = {
@@ -131,6 +146,15 @@ export type MemberView = {
     username: string;
 };
 
+export type PeerView = {
+    email: string;
+    endpoint_id: string;
+    joined_at: string;
+    name: string;
+    username: string;
+    verified: boolean;
+};
+
 export type ProjectView = {
     /**
      * A URL to the JSON Schema for this object.
@@ -167,6 +191,10 @@ export type UserView = {
     email: string;
     id: number;
     username: string;
+};
+
+export type AddEmailInputBodyWritable = {
+    email: string;
 };
 
 export type AddKeyInputBodyWritable = {
@@ -344,6 +372,81 @@ export type RegisterResponses = {
 };
 
 export type RegisterResponse = RegisterResponses[keyof RegisterResponses];
+
+export type ListEmailsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/emails';
+};
+
+export type ListEmailsErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ListEmailsError = ListEmailsErrors[keyof ListEmailsErrors];
+
+export type ListEmailsResponses = {
+    /**
+     * OK
+     */
+    200: Array<EmailView> | null;
+};
+
+export type ListEmailsResponse = ListEmailsResponses[keyof ListEmailsResponses];
+
+export type AddEmailData = {
+    body: AddEmailInputBodyWritable;
+    path?: never;
+    query?: never;
+    url: '/emails';
+};
+
+export type AddEmailErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type AddEmailError = AddEmailErrors[keyof AddEmailErrors];
+
+export type AddEmailResponses = {
+    /**
+     * Created
+     */
+    201: unknown;
+};
+
+export type RemoveEmailData = {
+    body?: never;
+    path: {
+        email: string;
+    };
+    query?: never;
+    url: '/emails/{email}';
+};
+
+export type RemoveEmailErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type RemoveEmailError = RemoveEmailErrors[keyof RemoveEmailErrors];
+
+export type RemoveEmailResponses = {
+    /**
+     * No Content
+     */
+    204: void;
+};
+
+export type RemoveEmailResponse = RemoveEmailResponses[keyof RemoveEmailResponses];
 
 export type ListKeysData = {
     body?: never;
@@ -686,3 +789,30 @@ export type RemoveMemberResponses = {
 };
 
 export type RemoveMemberResponse = RemoveMemberResponses[keyof RemoveMemberResponses];
+
+export type ProjectPeersData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/projects/{id}/peers';
+};
+
+export type ProjectPeersErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ProjectPeersError = ProjectPeersErrors[keyof ProjectPeersErrors];
+
+export type ProjectPeersResponses = {
+    /**
+     * OK
+     */
+    200: Array<PeerView> | null;
+};
+
+export type ProjectPeersResponse = ProjectPeersResponses[keyof ProjectPeersResponses];

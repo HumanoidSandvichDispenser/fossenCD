@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 
+import { useEmailsStore } from '@/stores/emails';
 import { useKeysStore } from '@/stores/keys';
 import { useOkayegStore } from '@/stores/okayeg';
 
+const emails = useEmailsStore();
 const keys = useKeysStore();
 const okayeg = useOkayegStore();
 
-const error = ref<string | null>(null);
+const keyError = ref<string | null>(null);
 const revoking = ref<string | null>(null);
 // the key currently being renamed, or null
 const renaming = ref<string | null>(null);
@@ -28,7 +30,7 @@ const thisDeviceUnregistered = computed(
 // Register this browser's key without opening a project. `getId` picks the id to
 // register: the current identity, or a freshly minted one.
 async function ensureThisDevice(getId: () => Promise<string>, failure: string) {
-  error.value = null;
+  keyError.value = null;
   registering.value = true;
   try {
     const id = await getId();
@@ -36,7 +38,7 @@ async function ensureThisDevice(getId: () => Promise<string>, failure: string) {
     await keys.ensure(id, 'Browser');
     await keys.list();
   } catch (e) {
-    error.value = e instanceof Error ? e.message : failure;
+    keyError.value = e instanceof Error ? e.message : failure;
   } finally {
     registering.value = false;
   }
@@ -108,24 +110,68 @@ const sorted = computed(() =>
     if (a.endpoint_id === thisDevice.value) {
       return -1;
     }
+
     if (b.endpoint_id === thisDevice.value) {
       return 1;
     }
+
     return b.created_at.localeCompare(a.created_at);
   }),
 );
 
-onMounted(async () => {
+// the emails section: add an address that verifies your claimed identity
+const newEmail = ref('');
+const addingEmail = ref(false);
+const emailError = ref<string | null>(null);
+const removingEmail = ref<string | null>(null);
+
+async function addEmail() {
+  emailError.value = null;
+  addingEmail.value = true;
+
   try {
-    thisDevice.value = await okayeg.deviceId();
-  } catch {
-    // deriving the device id is best-effort; the list still works without it
-  }
-  try {
-    await keys.list();
+    await emails.add(newEmail.value.trim());
+    newEmail.value = '';
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Could not load keys';
+    emailError.value = e instanceof Error ? e.message : 'Could not add email';
+  } finally {
+    addingEmail.value = false;
   }
+}
+
+async function removeEmail(email: string) {
+  if (!window.confirm(`Remove ${email} from your account?`)) {
+    return;
+  }
+
+  emailError.value = null;
+  removingEmail.value = email;
+
+  try {
+    await emails.remove(email);
+  } catch (e) {
+    emailError.value = e instanceof Error ? e.message : 'Could not remove email';
+  } finally {
+    removingEmail.value = null;
+  }
+}
+
+onMounted(() => {
+  okayeg
+    .deviceId()
+    .then((id) => {
+      thisDevice.value = id;
+    })
+    // deriving the device id is best-effort; the list still works without it
+    .catch(() => {});
+
+  keys.list().catch((e) => {
+    keyError.value = e instanceof Error ? e.message : 'Could not load keys';
+  });
+
+  emails.list().catch((e) => {
+    emailError.value = e instanceof Error ? e.message : 'Could not load emails';
+  });
 });
 
 function shortId(id: string) {
@@ -145,15 +191,18 @@ async function revoke(endpointId: string) {
   const warning = isSelf
     ? 'Revoke THIS device? You will lose sync access until you reconnect and register again.'
     : 'Revoke this key? Its live sessions on every project close immediately.';
+
   if (!window.confirm(warning)) {
     return;
   }
-  error.value = null;
+
+  keyError.value = null;
   revoking.value = endpointId;
+
   try {
     await keys.remove(endpointId);
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Could not revoke key';
+    keyError.value = e instanceof Error ? e.message : 'Could not revoke key';
   } finally {
     revoking.value = null;
   }
@@ -170,13 +219,13 @@ function cancelRename() {
 }
 
 async function commitRename(endpointId: string) {
-  error.value = null;
+  keyError.value = null;
   try {
     await keys.rename(endpointId, renameLabel.value.trim());
     renaming.value = null;
     renameLabel.value = '';
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Could not rename key';
+    keyError.value = e instanceof Error ? e.message : 'Could not rename key';
   }
 }
 </script>
@@ -235,7 +284,7 @@ async function commitRename(endpointId: string) {
     <p v-if="addError" class="error text-sm">{{ addError }}</p>
     <p v-else-if="addNote" class="state text-sm">{{ addNote }}</p>
 
-    <p v-if="error" class="error text-sm">{{ error }}</p>
+    <p v-if="keyError" class="error text-sm">{{ keyError }}</p>
 
     <p v-if="!keys.loaded" class="state text-sm">Loading...</p>
 
@@ -290,6 +339,56 @@ async function commitRename(endpointId: string) {
             @click="revoke(key.endpoint_id)"
           >
             {{ revoking === key.endpoint_id ? 'Revoking...' : 'Revoke' }}
+          </button>
+        </div>
+      </li>
+    </ul>
+
+    <header class="section-header">
+      <h1 class="h3">Emails</h1>
+    </header>
+
+    <p class="intro text-sm">
+      Peers claim a name and email when they connect. A claimed email shows as verified to
+      collaborators when it is on this list and the peer's key is on your account.
+    </p>
+
+    <form class="add card" @submit.prevent="addEmail">
+      <div class="add-fields">
+        <input
+          v-model="newEmail"
+          class="text-sm field"
+          type="email"
+          placeholder="Email address"
+          autocomplete="off"
+        />
+      </div>
+      <button type="submit" class="label-sm btn btn-sm" :disabled="addingEmail || !newEmail.trim()">
+        {{ addingEmail ? 'Adding...' : 'Add email' }}
+      </button>
+    </form>
+    <p v-if="emailError" class="error text-sm">{{ emailError }}</p>
+
+    <p v-if="!emails.loaded" class="state text-sm">Loading...</p>
+
+    <ul v-else class="list">
+      <li v-for="email in emails.emails" :key="email.email" class="card">
+        <div class="info">
+          <span class="name label-md">
+            {{ email.email }}
+            <span v-if="email.primary" class="chip label-sm">Primary</span>
+            <span v-if="email.verified" class="chip chip-verified label-sm">Verified</span>
+            <span v-else class="chip chip-muted label-sm">Unverified</span>
+          </span>
+          <span class="meta text-xs">Added {{ formatDate(email.created_at) }}</span>
+        </div>
+        <div v-if="!email.primary" class="actions">
+          <button
+            class="label-sm btn btn-sm btn-danger"
+            :disabled="removingEmail === email.email"
+            @click="removeEmail(email.email)"
+          >
+            {{ removingEmail === email.email ? 'Removing...' : 'Remove' }}
           </button>
         </div>
       </li>
@@ -429,5 +528,19 @@ header {
 .btn-ghost {
   background: transparent;
   color: var(--color-text-secondary);
+}
+
+.section-header {
+  margin-top: var(--space-10);
+}
+
+.chip-verified {
+  background: var(--color-success-light);
+  color: var(--color-success);
+}
+
+.chip-muted {
+  background: var(--color-surface);
+  color: var(--color-text-tertiary);
 }
 </style>

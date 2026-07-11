@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AddKeyData, AddKeyErrors, AddKeyResponses, AddMemberData, AddMemberErrors, AddMemberResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, DeleteProjectData, DeleteProjectErrors, DeleteProjectResponses, GetProjectData, GetProjectErrors, GetProjectResponses, ListKeysData, ListKeysErrors, ListKeysResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, MeData, MeErrors, MeResponses, ProjectEndpointData, ProjectEndpointErrors, ProjectEndpointResponses, ProjectLogsData, ProjectLogsErrors, ProjectLogsResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveKeyData, RemoveKeyErrors, RemoveKeyResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RenameKeyData, RenameKeyErrors, RenameKeyResponses } from './types.gen';
+import type { AddEmailData, AddEmailErrors, AddEmailResponses, AddKeyData, AddKeyErrors, AddKeyResponses, AddMemberData, AddMemberErrors, AddMemberResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, DeleteProjectData, DeleteProjectErrors, DeleteProjectResponses, GetProjectData, GetProjectErrors, GetProjectResponses, ListEmailsData, ListEmailsErrors, ListEmailsResponses, ListKeysData, ListKeysErrors, ListKeysResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, MeData, MeErrors, MeResponses, ProjectEndpointData, ProjectEndpointErrors, ProjectEndpointResponses, ProjectLogsData, ProjectLogsErrors, ProjectLogsResponses, ProjectPeersData, ProjectPeersErrors, ProjectPeersResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveEmailData, RemoveEmailErrors, RemoveEmailResponses, RemoveKeyData, RemoveKeyErrors, RemoveKeyResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RenameKeyData, RenameKeyErrors, RenameKeyResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -53,12 +53,34 @@ export const register = <ThrowOnError extends boolean = false>(options: Options<
 });
 
 /**
- * List the caller's registered okayeg peer keys
+ * List the user's email addresses
+ */
+export const listEmails = <ThrowOnError extends boolean = false>(options?: Options<ListEmailsData, ThrowOnError>) => (options?.client ?? client).get<ListEmailsResponses, ListEmailsErrors, ThrowOnError>({ url: '/emails', ...options });
+
+/**
+ * Add an email address to the user's account
+ */
+export const addEmail = <ThrowOnError extends boolean = false>(options: Options<AddEmailData, ThrowOnError>) => (options.client ?? client).post<AddEmailResponses, AddEmailErrors, ThrowOnError>({
+    url: '/emails',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Remove a non-primary email address
+ */
+export const removeEmail = <ThrowOnError extends boolean = false>(options: Options<RemoveEmailData, ThrowOnError>) => (options.client ?? client).delete<RemoveEmailResponses, RemoveEmailErrors, ThrowOnError>({ url: '/emails/{email}', ...options });
+
+/**
+ * List the user's registered okayeg peer keys
  */
 export const listKeys = <ThrowOnError extends boolean = false>(options?: Options<ListKeysData, ThrowOnError>) => (options?.client ?? client).get<ListKeysResponses, ListKeysErrors, ThrowOnError>({ url: '/keys', ...options });
 
 /**
- * Register a peer public key (EndpointId) on the caller's account
+ * Register a peer public key (EndpointId) on the user's account
  */
 export const addKey = <ThrowOnError extends boolean = false>(options: Options<AddKeyData, ThrowOnError>) => (options.client ?? client).post<AddKeyResponses, AddKeyErrors, ThrowOnError>({
     url: '/keys',
@@ -87,7 +109,7 @@ export const renameKey = <ThrowOnError extends boolean = false>(options: Options
 });
 
 /**
- * List the caller's projects
+ * List the user's projects
  */
 export const listProjects = <ThrowOnError extends boolean = false>(options?: Options<ListProjectsData, ThrowOnError>) => (options?.client ?? client).get<ListProjectsResponses, ListProjectsErrors, ThrowOnError>({ url: '/projects', ...options });
 
@@ -144,3 +166,8 @@ export const addMember = <ThrowOnError extends boolean = false>(options: Options
  * Remove a collaborator and revoke their peers (owner only)
  */
 export const removeMember = <ThrowOnError extends boolean = false>(options: Options<RemoveMemberData, ThrowOnError>) => (options.client ?? client).delete<RemoveMemberResponses, RemoveMemberErrors, ThrowOnError>({ url: '/projects/{id}/members/{userId}', ...options });
+
+/**
+ * List the project's live peers with their claimed identities
+ */
+export const projectPeers = <ThrowOnError extends boolean = false>(options: Options<ProjectPeersData, ThrowOnError>) => (options.client ?? client).get<ProjectPeersResponses, ProjectPeersErrors, ThrowOnError>({ url: '/projects/{id}/peers', ...options });

@@ -1,9 +1,6 @@
 import { defineStore } from 'pinia';
 import { computed, markRaw, ref } from 'vue';
-import initOkayeg, {
-  OkayegClient,
-  type WireDelta,
-} from '@sandvichxyz/okayeg-wasm';
+import initOkayeg, { OkayegClient, type WireDelta } from '@sandvichxyz/okayeg-wasm';
 import wasmUrl from '@sandvichxyz/okayeg-wasm/wasm-url';
 
 import { applyWireDelta } from '@/teamtype/collab';
@@ -35,15 +32,19 @@ export interface CommentFields {
   quote?: string;
 }
 
+/** The name/email this peer claims in the hello frame. Display only. */
+interface Identity {
+  name: string | null;
+  email: string | null;
+}
+
 function isTypst(file: string): boolean {
   return file.toLowerCase().endsWith('.typ');
 }
 
 // Prefer `main.typ` as the default preview target, then any other .typ file.
 function defaultPreviewFile(files: string[]): string | null {
-  return (
-    files.find((f) => f.toLowerCase() === 'main.typ') ?? files.find(isTypst) ?? null
-  );
+  return files.find((f) => f.toLowerCase() === 'main.typ') ?? files.find(isTypst) ?? null;
 }
 
 export const useOkayegStore = defineStore('okayeg', () => {
@@ -71,6 +72,18 @@ export const useOkayegStore = defineStore('okayeg', () => {
 
   let client: OkayegClient | null = null;
 
+  // kept across reset() so a reconnect claims the same identity
+  let identity: Identity = { name: null, email: null };
+
+  /**
+   * Set the name/email this peer claims to hosts it connects to. Applies to the
+   * live client at once and to every client started after.
+   */
+  function setIdentity(name: string | null, email: string | null) {
+    identity = { name, email };
+    client?.setIdentity(name, email);
+  }
+
   async function start() {
     if (client) {
       return;
@@ -82,6 +95,7 @@ export const useOkayegStore = defineStore('okayeg', () => {
     const { seed } = await loadOrCreateSeed();
     const c = OkayegClient.withSeed(seed);
     client = c;
+    c.setIdentity(identity.name, identity.email);
 
     c.onLog((message: string) => {
       logs.value.push(message);
@@ -297,6 +311,7 @@ export const useOkayegStore = defineStore('okayeg', () => {
     start,
     reset,
     connect,
+    setIdentity,
     deviceId,
     regenerateIdentity,
     selectFile,

@@ -2,15 +2,18 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
+import { useAuthStore } from '@/stores/auth';
 import { useOkayegStore } from '@/stores/okayeg';
 import { useProjectsStore } from '@/stores/projects';
 import { useKeysStore } from '@/stores/keys';
 import type { ProjectView } from '@/client/types.gen';
 import EditorWorkspace from '@/components/EditorWorkspace.vue';
+import LivePeers from '@/components/LivePeers.vue';
 import ShareProjectDialog from '@/components/ShareProjectDialog.vue';
 import LogsDialog from '@/components/LogsDialog.vue';
 
 const route = useRoute();
+const auth = useAuthStore();
 const okayeg = useOkayegStore();
 const projects = useProjectsStore();
 const keys = useKeysStore();
@@ -23,11 +26,7 @@ const showLogs = ref(false);
 // the workspace is shown once we've dialed the host and the live sync is
 // running; until then (or on error/disconnect) we show nothing
 const connected = computed(
-  () =>
-    !error.value &&
-    !okayeg.lastDisconnect &&
-    okayeg.ready &&
-    okayeg.connected,
+  () => !error.value && !okayeg.lastDisconnect && okayeg.ready && okayeg.connected,
 );
 
 /**
@@ -44,6 +43,9 @@ async function openProject(id: string) {
   error.value = null;
   project.value = null;
   okayeg.reset();
+  // claim the logged-in user's identity before dialing
+  const user = await auth.getUser();
+  okayeg.setIdentity(user?.username ?? null, user?.email ?? null);
   await okayeg.start();
 
   projects
@@ -126,6 +128,11 @@ onBeforeUnmount(() => {
           connecting&hellip;
         </span>
         <template v-else>
+          <LivePeers
+            v-if="typeof route.params.id === 'string'"
+            :project-id="route.params.id"
+            :self-id="okayeg.nodeId"
+          />
           <span v-if="okayeg.nodeId" class="chip label-sm" :title="okayeg.nodeId">
             <span class="dot dot-ok" />
             {{ okayeg.nodeId.slice(0, 8) }}&hellip;
@@ -139,9 +146,7 @@ onBeforeUnmount(() => {
       <!-- the workspace teleports its layout switcher here once connected -->
       <div id="workspace-actions" class="workspace-actions"></div>
 
-      <button class="label-sm btn btn-sm btn-secondary" @click="showLogs = true">
-        Logs
-      </button>
+      <button class="label-sm btn btn-sm btn-secondary" @click="showLogs = true">Logs</button>
       <button class="label-sm btn btn-sm btn-primary" @click="sharing = true">
         Share / Connect
       </button>
