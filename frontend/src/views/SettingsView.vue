@@ -69,6 +69,8 @@ const newId = ref('');
 const newLabel = ref('');
 const adding = ref(false);
 const addError = ref<string | null>(null);
+// neutral notice for a benign non-add, such as a key already on the account
+const addNote = ref<string | null>(null);
 
 const newIdValid = computed(() => /^[0-9a-f]{64}$/.test(newId.value.trim()));
 
@@ -80,6 +82,13 @@ async function addKey() {
   }
 
   addError.value = null;
+  addNote.value = null;
+
+  if (keys.keys.some((k) => k.endpoint_id === endpointId)) {
+    addNote.value = 'This key is already on your account.';
+    return;
+  }
+
   adding.value = true;
   try {
     await keys.ensure(endpointId, newLabel.value.trim());
@@ -224,6 +233,7 @@ async function commitRename(endpointId: string) {
       </button>
     </form>
     <p v-if="addError" class="error text-sm">{{ addError }}</p>
+    <p v-else-if="addNote" class="state text-sm">{{ addNote }}</p>
 
     <p v-if="error" class="error text-sm">{{ error }}</p>
 

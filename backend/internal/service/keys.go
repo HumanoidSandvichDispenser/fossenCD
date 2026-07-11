@@ -18,8 +18,9 @@ type KeyService struct {
 	host     okayeg.Host
 }
 
-// AddKey binds an endpoint to the caller's account. Idempotent. Rejects a
-// malformed endpoint id before it reaches the database.
+// AddKey binds an endpoint to a user's account. Idempotent for a key they
+// already own; the endpoint may belong to other accounts too. Returns
+// ErrBadRequest for a malformed endpoint id.
 func (s *KeyService) AddKey(ctx context.Context, userID uint, endpointID, label string) error {
 	if !okayeg.ValidEndpointID(endpointID) {
 		return ErrBadRequest
@@ -27,20 +28,19 @@ func (s *KeyService) AddKey(ctx context.Context, userID uint, endpointID, label 
 	return s.users.AddKey(ctx, userID, endpointID, label)
 }
 
-// ListKeys returns the caller's registered keys.
+// ListKeys returns a user's registered keys.
 func (s *KeyService) ListKeys(ctx context.Context, userID uint) ([]store.UserKey, error) {
 	return s.users.ListKeys(ctx, userID)
 }
 
-// RenameKey changes the label of one of the caller's keys. The endpoint ID is
-// immutable.
+// RenameKey relabels one of a user's keys. The endpoint id is immutable.
 func (s *KeyService) RenameKey(ctx context.Context, userID uint, endpointID, newLabel string) error {
 	return s.users.RenameKey(ctx, userID, endpointID, newLabel)
 }
 
-// RemoveKey deletes one of the caller's keys, then closes its live sessions on
-// every project the caller is a member of. The row (policy) drops before the
-// live sessions, so a failure leaves the key gone rather than still authorized.
+// RemoveKey deletes a key and closes its live sessions on every project it
+// authorized. The row (policy) drops before the sessions, so a failure leaves
+// the key gone rather than still authorized.
 func (s *KeyService) RemoveKey(ctx context.Context, userID uint, endpointID string) error {
 	if err := s.users.RemoveKey(ctx, userID, endpointID); err != nil {
 		return mapErr(err)

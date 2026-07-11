@@ -134,9 +134,7 @@ func (m *HostManager) Stop(id string) {
 }
 
 // Revoke writes `revoke <endpointID>` to id's daemon over its stdin repl,
-// closing the peer's live sessions. Whether the peer gets back in on its next
-// connection is the authz gate's call, so callers change policy (the DB) first
-// and then revoke.
+// closing the peer's live sessions.
 func (m *HostManager) Revoke(id, endpointID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

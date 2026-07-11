@@ -61,9 +61,8 @@ func (s *ProjectStore) ListUserProjects(ctx context.Context, userID uint) ([]Pro
 	return projects, err
 }
 
-// Delete deletes the project with the given ID. The FK cascade removes its
-// members, but the caller is responsible for stopping any active host and deleting
-// the share dir.
+// Delete deletes the project with the given ID and removes its members. This
+// still keeps the host on and does not delete the share dir.
 func (s *ProjectStore) Delete(ctx context.Context, id string) error {
 	return s.db.WithContext(ctx).Delete(&Project{}, "id = ?", id).Error
 }

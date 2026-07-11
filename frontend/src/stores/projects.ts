@@ -34,7 +34,7 @@ export const useProjectsStore = defineStore('projects', () => {
   const loaded = ref(false);
 
   /**
-   * Fetch the caller's projects. Deduped so concurrent callers share one request.
+   * Fetch the user's projects.
    */
   async function list() {
     const { data } = await clientStore.wrap(listProjects)({ client });
@@ -43,7 +43,9 @@ export const useProjectsStore = defineStore('projects', () => {
     return projects.value;
   }
 
-  /** Fetch a single project the caller has access to. */
+  /**
+   * Fetch a project the user has access to.
+   */
   async function get(id: string): Promise<ProjectView> {
     const { data, error } = await getProject({ client, path: { id } });
     if (error || !data) {

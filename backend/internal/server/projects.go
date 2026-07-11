@@ -23,7 +23,7 @@ func viewProject(p store.Project) projectView {
 func (s *Server) registerProjects(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID: "list-projects", Method: http.MethodGet, Path: "/projects",
-		Summary: "List the caller's projects",
+		Summary: "List the user's projects",
 	}, s.handleListProjects)
 
 	huma.Register(api, huma.Operation{

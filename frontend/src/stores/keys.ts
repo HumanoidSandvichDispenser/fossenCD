@@ -17,10 +17,7 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 /**
- * The caller's account-scoped okayeg peer keys: the public keys their browser
- * and native peers upload so they may sync every project they belong to. A key
- * authorizes its owner project-wide, so registration and revocation live here on
- * the account rather than per project.
+ * The user's public keys their browser.
  */
 export const useKeysStore = defineStore('keys', () => {
   const clientStore = useClientStore();
@@ -29,7 +26,9 @@ export const useKeysStore = defineStore('keys', () => {
   const keys = ref<KeyView[]>([]);
   const loaded = ref(false);
 
-  /** Fetch the caller's registered keys. */
+  /**
+   * Fetch the user's registered keys.
+   */
   async function list(): Promise<KeyView[]> {
     const { data, error } = await listKeys({ client });
     if (error || !data) {

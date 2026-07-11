@@ -1,8 +1,7 @@
 // Package store holds the gorm models and database handle. Only user accounts,
 // project metadata, and account peer public keys live here; okayeg private keys
 // stay on disk in each project's .eg/ (see internal/okayeg), and user peers hold
-// their own private keys locally. The package is database-agnostic: callers pass
-// the gorm.Dialector.
+// their own private keys locally. The package is database-agnostic.
 package store
 
 import (
@@ -23,6 +22,15 @@ func Open(dialector gorm.Dialector) (*gorm.DB, error) {
 	}
 	if err := db.AutoMigrate(&User{}, &Project{}, &ProjectMember{}, &UserKey{}, &Session{}); err != nil {
 		return nil, err
+	}
+	// endpoint_id used to be globally unique (one endpoint -> one account). It is
+	// now unique only per user, so an endpoint may be registered by several
+	// accounts. AutoMigrate adds the new composite index but leaves the old
+	// single-column one in place, so drop it on databases that still carry it.
+	if db.Migrator().HasIndex(&UserKey{}, "idx_user_keys_endpoint_id") {
+		if err := db.Migrator().DropIndex(&UserKey{}, "idx_user_keys_endpoint_id"); err != nil {
+			return nil, err
+		}
 	}
 	return db, nil
 }

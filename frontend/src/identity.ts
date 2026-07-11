@@ -40,8 +40,7 @@ async function loadSeed(): Promise<Uint8Array | null> {
 
 /**
  * Return the browser's identity seed, minting and persisting a fresh 32-byte one
- * on first use. `fresh` is true when a new seed was just created, so the caller
- * knows to upload its public half.
+ * on first use. Set `fresh` to true if the seed was just created.
  */
 export async function loadOrCreateSeed(): Promise<{ seed: Uint8Array; fresh: boolean }> {
   const existing = await loadSeed();

@@ -30,7 +30,7 @@ export const useClientStore = defineStore('client', () => {
    *
    * `F` is left unconstrained so hey-api's `RequestResult` (a union of promises)
    * is accepted as-is; the casts bridge it to `call`'s plain `Promise` and back
-   * to `ReturnType<F>`, keeping the public signature exact for callers.
+   * to `ReturnType<F>`, keeping the public signature exact.
    */
   function wrap<F extends (...args: never[]) => unknown>(
     fn: F,

@@ -10,19 +10,18 @@ import (
 	"github.com/humanoidsandvichdispenser/fossencd/backend/internal/store"
 )
 
-// registerKeys mounts the account-scoped peer key routes. A key is an okayeg
-// EndpointId (public key) the caller's browser or native peer uploads so it may
-// sync every project the caller belongs to. Keys are listed and revoked here,
-// not per project, because they are account-wide.
+// registerKeys mounts all keys belonging to a user. A key is an okayeg
+// EndpointId (public key) the user's browser or local peer uploads so it may
+// sync every project the user belongs to.
 func (s *Server) registerKeys(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID: "list-keys", Method: http.MethodGet, Path: "/keys",
-		Summary: "List the caller's registered okayeg peer keys",
+		Summary: "List the user's registered okayeg peer keys",
 	}, s.handleListKeys)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "add-key", Method: http.MethodPost, Path: "/keys",
-		Summary:       "Register a peer public key (EndpointId) on the caller's account",
+		Summary:       "Register a peer public key (EndpointId) on the user's account",
 		DefaultStatus: http.StatusCreated,
 	}, s.handleAddKey)
 

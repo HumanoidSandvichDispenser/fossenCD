@@ -227,6 +227,32 @@ func TestAddKeyIsIdempotent(t *testing.T) {
 	}
 }
 
+// Two accounts may register the same endpoint: possession of the private key
+// is the proof of control, so the second add succeeds and both accounts keep
+// their own row with their own label.
+func TestAddKeyAllowsMultipleAccounts(t *testing.T) {
+	svc := newServices(t)
+	ctx := context.Background()
+	a := ownerID(t, svc, "alice")
+	b := ownerID(t, svc, "bob")
+
+	if err := svc.Keys.AddKey(ctx, a, endpointAlice, "alice-laptop"); err != nil {
+		t.Fatalf("alice AddKey: %v", err)
+	}
+	if err := svc.Keys.AddKey(ctx, b, endpointAlice, "bob-laptop"); err != nil {
+		t.Fatalf("bob AddKey of the same endpoint: %v", err)
+	}
+
+	aKeys, _ := svc.Keys.ListKeys(ctx, a)
+	if len(aKeys) != 1 || aKeys[0].Label != "alice-laptop" {
+		t.Fatalf("alice keys = %+v, want alice-laptop", aKeys)
+	}
+	bKeys, _ := svc.Keys.ListKeys(ctx, b)
+	if len(bKeys) != 1 || bKeys[0].Label != "bob-laptop" {
+		t.Fatalf("bob keys = %+v, want bob-laptop", bKeys)
+	}
+}
+
 // AuthorizePeer grants an endpoint iff it's a registered key whose owner is a
 // member of the project. A key alone (owner not a member) is refused.
 func TestAuthorizePeerThroughMembership(t *testing.T) {
@@ -258,6 +284,24 @@ func TestAuthorizePeerThroughMembership(t *testing.T) {
 	}
 	if v, err := svc.Projects.AuthorizePeer(ctx, p.ID, endpointBob); err != nil || v != PeerGranted {
 		t.Fatalf("bob after join: verdict=%v err=%v, want granted", v, err)
+	}
+}
+
+// An endpoint registered by several accounts is granted when any one of those
+// accounts is a member, even if the others are not.
+func TestAuthorizePeerGrantsWhenAnyOwnerIsMember(t *testing.T) {
+	svc := newServices(t)
+	ctx := context.Background()
+	a := ownerID(t, svc, "alice")
+	b := ownerID(t, svc, "bob")
+	p, _ := svc.Projects.Create(ctx, a, "doc")
+
+	// alice (a member) and bob (not) both register the same endpoint.
+	_ = svc.Keys.AddKey(ctx, a, endpointAlice, "")
+	_ = svc.Keys.AddKey(ctx, b, endpointAlice, "")
+
+	if v, err := svc.Projects.AuthorizePeer(ctx, p.ID, endpointAlice); err != nil || v != PeerGranted {
+		t.Fatalf("verdict=%v err=%v, want granted via alice's membership", v, err)
 	}
 }
 
@@ -293,7 +337,7 @@ func TestRemoveKeyRejectsOthersKey(t *testing.T) {
 	b := ownerID(t, svc, "bob")
 	_ = svc.Keys.AddKey(ctx, a, endpointAlice, "")
 
-	// bob can't delete alice's key: scoped to the caller's own rows
+	// bob can't delete alice's key: scoped to the user's own rows
 	if err := svc.Keys.RemoveKey(ctx, b, endpointAlice); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("want ErrNotFound, got %v", err)
 	}

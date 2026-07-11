@@ -53,15 +53,13 @@ func (s *ProjectService) writeAuthzConfig(projectID string) error {
 	return okayeg.WriteAuthzConfig(s.fs, s.shareDir(projectID), argv)
 }
 
-// PeerAuthz is the outcome of an authz check. It names the refusal cases apart
-// so the caller can phrase each one, and in particular tell the unregistered
-// case (enrolling is the fix) from a registered non-member (an owner must add
-// them).
+// PeerAuthz is the outcome of an authz check.
 type PeerAuthz int
 
 const (
-	// peerError is the zero value, returned alongside a non-nil error so a
-	// caller that ignores the verdict on error never reads it as a grant.
+	// peerError is the zero value, returned alongside a non-nil error. As the
+	// zero value, a verdict ignored on the error path defaults to refusal,
+	// never a grant.
 	peerError PeerAuthz = iota
 	// PeerGranted: the peer may sync.
 	PeerGranted
@@ -74,28 +72,32 @@ const (
 )
 
 // AuthorizePeer is the decision behind the authz socket: whether endpointID may
-// sync projectID. It holds when the endpoint is a key registered to some account
-// and that account is a member of the project. eg asks once per incoming
-// connection. A key authorizes its owner on every project they belong to, so the
-// decision is endpoint -> owning account -> membership.
+// sync projectID. It holds when the endpoint is registered to some account that
+// is a member of the project. eg asks once per incoming connection. An endpoint
+// can be registered by several accounts, so the decision is endpoint -> owning
+// accounts -> membership, granting if any owner is a member.
 func (s *ProjectService) AuthorizePeer(ctx context.Context, projectID, endpointID string) (PeerAuthz, error) {
 	if !okayeg.ValidEndpointID(endpointID) {
 		return PeerMalformedID, nil
 	}
-	key, err := s.users.GetKeyByEndpoint(ctx, endpointID)
-	if errors.Is(err, store.ErrNotFound) {
-		return PeerUnregistered, nil
-	}
+	owners, err := s.users.OwnersOfEndpoint(ctx, endpointID)
 	if err != nil {
 		return peerError, err
 	}
-	if _, err := s.projects.GetMember(ctx, projectID, key.UserID); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return PeerNotMember, nil
-		}
-		return peerError, err
+	if len(owners) == 0 {
+		return PeerUnregistered, nil
 	}
-	return PeerGranted, nil
+	for _, uid := range owners {
+		switch _, err := s.projects.GetMember(ctx, projectID, uid); {
+		case err == nil:
+			return PeerGranted, nil
+		case errors.Is(err, store.ErrNotFound):
+			continue
+		default:
+			return peerError, err
+		}
+	}
+	return PeerNotMember, nil
 }
 
 func (s *ProjectService) List(ctx context.Context, userID uint) ([]store.Project, error) {
