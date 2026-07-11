@@ -4,7 +4,8 @@ import { onBeforeUnmount, ref, watch } from 'vue';
 import { projectPeers } from '@/client/sdk.gen';
 import type { PeerView } from '@/client/types.gen';
 import { useClientStore } from '@/stores/client';
-import { PhSealCheck, PhSealQuestion } from '@phosphor-icons/vue';
+import BaseChip from '@/components/BaseChip.vue';
+import VerifiedBadge from '@/components/VerifiedBadge.vue';
 
 const props = defineProps<{
   projectId: string;
@@ -68,38 +69,14 @@ function title(peer: PeerView): string {
 </script>
 
 <template>
-  <span
-    v-for="peer in peers"
-    :key="peer.endpoint_id"
-    class="peer chip label-sm"
-    :title="title(peer)"
-  >
+  <BaseChip v-for="peer in peers" :key="peer.endpoint_id" class="peer" :title="title(peer)">
     {{ display(peer) }}
-    <!--span v-if="peer.verified" class="badge" aria-label="Verified">&check;</span-->
-    <PhSealCheck
-      v-if="peer.verified"
-      class="badge"
-      size="16"
-      weight="fill"
-      aria-label="Verified"
-    />
-  </span>
+    <VerifiedBadge :verified="peer.verified" />
+  </BaseChip>
 </template>
 
 <style scoped>
 .peer {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
-  color: var(--color-text-secondary);
-  background: var(--color-surface);
-  border-radius: var(--radius-full);
   white-space: nowrap;
-}
-
-.badge {
-  color: var(--color-primary);
-  font-weight: 700;
 }
 </style>

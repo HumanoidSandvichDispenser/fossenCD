@@ -4,6 +4,8 @@ import { computed, onMounted, ref } from 'vue';
 import { useEmailsStore } from '@/stores/emails';
 import { useKeysStore } from '@/stores/keys';
 import { useOkayegStore } from '@/stores/okayeg';
+import BaseChip from '@/components/BaseChip.vue';
+import VerifiedBadge from '@/components/VerifiedBadge.vue';
 
 const emails = useEmailsStore();
 const keys = useKeysStore();
@@ -318,7 +320,7 @@ async function commitRename(endpointId: string) {
           <template v-else>
             <span class="name label-md">
               {{ key.label || 'Unnamed device' }}
-              <span v-if="key.endpoint_id === thisDevice" class="chip label-sm">This device</span>
+              <BaseChip v-if="key.endpoint_id === thisDevice" variant="primary">This device</BaseChip>
             </span>
             <span class="meta text-xs" :title="key.endpoint_id">{{
               shortId(key.endpoint_id)
@@ -376,9 +378,8 @@ async function commitRename(endpointId: string) {
         <div class="info">
           <span class="name label-md">
             {{ email.email }}
-            <span v-if="email.primary" class="chip label-sm">Primary</span>
-            <span v-if="email.verified" class="chip chip-verified label-sm">Verified</span>
-            <span v-else class="chip chip-muted label-sm">Unverified</span>
+            <BaseChip v-if="email.primary" variant="primary">Primary</BaseChip>
+            <VerifiedBadge :verified="email.verified" label />
           </span>
           <span class="meta text-xs">Added {{ formatDate(email.created_at) }}</span>
         </div>
@@ -492,12 +493,6 @@ header {
   color: var(--color-text);
 }
 
-.chip {
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-full);
-  background: var(--color-primary-light);
-  color: var(--color-primary);
-}
 
 .meta {
   color: var(--color-text-tertiary);
@@ -534,13 +529,4 @@ header {
   margin-top: var(--space-10);
 }
 
-.chip-verified {
-  background: var(--color-success-light);
-  color: var(--color-success);
-}
-
-.chip-muted {
-  background: var(--color-surface);
-  color: var(--color-text-tertiary);
-}
 </style>

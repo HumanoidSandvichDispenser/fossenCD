@@ -7,6 +7,7 @@ import { useOkayegStore } from '@/stores/okayeg';
 import { useProjectsStore } from '@/stores/projects';
 import { useKeysStore } from '@/stores/keys';
 import type { ProjectView } from '@/client/types.gen';
+import BaseChip from '@/components/BaseChip.vue';
 import EditorWorkspace from '@/components/EditorWorkspace.vue';
 import LivePeers from '@/components/LivePeers.vue';
 import ShareProjectDialog from '@/components/ShareProjectDialog.vue';
@@ -118,28 +119,28 @@ onBeforeUnmount(() => {
       <div class="spacer" />
 
       <div class="status">
-        <span v-if="error" class="chip chip-error label-sm">{{ error }}</span>
-        <span v-else-if="!okayeg.ready" class="chip label-sm">
+        <BaseChip v-if="error" variant="error">{{ error }}</BaseChip>
+        <BaseChip v-else-if="!okayeg.ready">
           <span class="dot dot-pending" />
           starting&hellip;
-        </span>
-        <span v-else-if="!okayeg.connected" class="chip label-sm">
+        </BaseChip>
+        <BaseChip v-else-if="!okayeg.connected">
           <span class="dot dot-pending" />
           connecting&hellip;
-        </span>
+        </BaseChip>
         <template v-else>
           <LivePeers
             v-if="typeof route.params.id === 'string'"
             :project-id="route.params.id"
             :self-id="okayeg.nodeId"
           />
-          <span v-if="okayeg.nodeId" class="chip label-sm" :title="okayeg.nodeId">
+          <BaseChip v-if="okayeg.nodeId" :title="okayeg.nodeId">
             <span class="dot dot-ok" />
             {{ okayeg.nodeId.slice(0, 8) }}&hellip;
-          </span>
-          <span v-if="okayeg.lastDisconnect" class="chip chip-error label-sm">
+          </BaseChip>
+          <BaseChip v-if="okayeg.lastDisconnect" variant="error">
             dropped: {{ okayeg.lastDisconnect }}
-          </span>
+          </BaseChip>
         </template>
       </div>
 
@@ -244,21 +245,6 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-}
-
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
-  color: var(--color-text-secondary);
-  background: var(--color-surface);
-  border-radius: var(--radius-full);
-}
-
-.chip-error {
-  color: var(--color-error);
-  background: var(--color-error-light);
 }
 
 .dot {
