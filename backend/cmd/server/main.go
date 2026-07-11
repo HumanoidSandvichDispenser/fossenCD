@@ -44,6 +44,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("authz script path: %v", err)
 	}
+	sessionScript, err := filepath.Abs(cfg.SessionScript)
+	if err != nil {
+		log.Fatalf("session script path: %v", err)
+	}
 	authzSocket := cfg.AuthzSocket
 	if authzSocket == "" {
 		authzSocket = filepath.Join(cfg.DataDir, "authz.sock")
@@ -60,6 +64,8 @@ func main() {
 		Host:        host,
 		AuthzScript: authzScript,
 		AuthzSocket: authzSocket,
+
+		SessionScript: sessionScript,
 	})
 
 	// the authz socket: where each eg daemon's hook script asks whether a

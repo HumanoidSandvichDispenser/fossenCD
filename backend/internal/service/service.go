@@ -14,6 +14,8 @@ type Services struct {
 	Auth     *AuthService
 	Projects *ProjectService
 	Keys     *KeyService
+	Emails   *EmailService
+	Presence *Presence
 }
 
 type Options struct {
@@ -29,27 +31,45 @@ type Options struct {
 	// no config is written and eg falls back to its trust file.
 	AuthzScript string
 	AuthzSocket string
+
+	// SessionScript builds the config's session command the same way: eg runs
+	// it per session event (peer join/leave) and it forwards the peer's claimed
+	// identity to the backend over the same socket. Empty omits the hook.
+	SessionScript string
+
+	// RequireEmailConfirmation withholds the verified state on added emails
+	// until a confirmation flow resolves it. Off means adding an address
+	// verifies it immediately.
+	RequireEmailConfirmation bool
 }
 
 func New(o Options) *Services {
 	projects := store.NewProjectStore(o.DB)
 	users := store.NewUserStore(o.DB)
+	auth := &AuthService{db: o.DB, ttl: o.SessionTTL}
 
 	return &Services{
-		Auth: &AuthService{db: o.DB, ttl: o.SessionTTL},
+		Auth: auth,
 		Projects: &ProjectService{
-			projects:    projects,
-			users:       users,
-			fs:          o.FS,
-			dataDir:     o.DataDir,
-			host:        o.Host,
-			authzScript: o.AuthzScript,
-			authzSocket: o.AuthzSocket,
+			projects:      projects,
+			users:         users,
+			fs:            o.FS,
+			dataDir:       o.DataDir,
+			host:          o.Host,
+			authzScript:   o.AuthzScript,
+			authzSocket:   o.AuthzSocket,
+			sessionScript: o.SessionScript,
 		},
 		Keys: &KeyService{
 			users:    users,
 			projects: projects,
 			host:     o.Host,
 		},
+		Emails: &EmailService{
+			db:                  users,
+			users:               auth,
+			requireConfirmation: o.RequireEmailConfirmation,
+		},
+		Presence: NewPresence(),
 	}
 }

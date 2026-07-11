@@ -22,7 +22,17 @@ func (s *AuthService) Register(ctx context.Context, username, email, password st
 		return store.User{}, store.Session{}, err
 	}
 	u := store.User{Username: username, Email: email, PasswordHash: hash}
-	if err := s.db.WithContext(ctx).Create(&u).Error; err != nil {
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&u).Error; err != nil {
+			return err
+		}
+
+		// the registration email seeds the account's email set, verified:
+		// without a mailer there is no confirmation to wait for
+		now := time.Now()
+		return tx.Create(&store.UserEmail{UserID: u.ID, Email: email, VerifiedAt: &now}).Error
+	})
+	if err != nil {
 		return store.User{}, store.Session{}, ErrConflict
 	}
 	return s.newSession(ctx, u)

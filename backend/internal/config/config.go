@@ -11,9 +11,10 @@ type Config struct {
 	DBPath      string // sqlite file path
 	DataDir     string // base dir holding per-project share dirs
 	EgBin       string // okayeg `eg` daemon binary (on PATH or absolute)
-	AuthzScript string // hook script eg runs per incoming connection
-	AuthzSocket string // unix socket the script queries; empty derives <DataDir>/authz.sock
-	PublicURL   string // frontend base URL for user-facing links
+	AuthzScript   string // hook script eg runs per incoming connection
+	AuthzSocket   string // unix socket the script queries; empty derives <DataDir>/authz.sock
+	SessionScript string // hook script eg runs per peer join/leave
+	PublicURL     string // frontend base URL for user-facing links
 }
 
 // Load reads config from the environment, applying dev defaults.
@@ -23,9 +24,10 @@ func Load() Config {
 		DBPath:      env("FOSSENCD_DB", "fossencd.db"),
 		DataDir:     env("FOSSENCD_DATA_DIR", "data"),
 		EgBin:       env("FOSSENCD_EG_BIN", "eg"),
-		AuthzScript: env("FOSSENCD_AUTHZ_SCRIPT", "scripts/eg-authz"),
-		AuthzSocket: env("FOSSENCD_AUTHZ_SOCKET", ""),
-		PublicURL:   strings.TrimRight(env("FOSSENCD_PUBLIC_URL", ""), "/"),
+		AuthzScript:   env("FOSSENCD_AUTHZ_SCRIPT", "scripts/eg-authz"),
+		AuthzSocket:   env("FOSSENCD_AUTHZ_SOCKET", ""),
+		SessionScript: env("FOSSENCD_SESSION_SCRIPT", "scripts/eg-session"),
+		PublicURL:     strings.TrimRight(env("FOSSENCD_PUBLIC_URL", ""), "/"),
 	}
 }
 

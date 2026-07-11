@@ -65,6 +65,47 @@ func (s *Server) registerProjects(api huma.API) {
 		OperationID: "project-logs", Method: http.MethodGet, Path: "/projects/{id}/logs",
 		Summary: "View recent stdout/stderr of the project's eg daemon",
 	}, s.handleProjectLogs)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "project-peers", Method: http.MethodGet, Path: "/projects/{id}/peers",
+		Summary: "List the project's live peers with their claimed identities",
+	}, s.handleProjectPeers)
+}
+
+type peerView struct {
+	EndpointID string    `json:"endpoint_id"`
+	Name       string    `json:"name"`
+	Email      string    `json:"email"`
+	Verified   bool      `json:"verified"`
+	Username   string    `json:"username"`
+	JoinedAt   time.Time `json:"joined_at"`
+}
+
+type peersOutput struct{ Body []peerView }
+
+func (s *Server) handleProjectPeers(ctx context.Context, in *idInput) (*peersOutput, error) {
+	uid, err := requireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// membership gate; the peer list itself lives in memory
+	if _, err := s.svc.Projects.Get(ctx, uid, in.ID); err != nil {
+		return nil, httpError(err)
+	}
+
+	peers := s.svc.Presence.Peers(in.ID)
+	out := &peersOutput{Body: make([]peerView, 0, len(peers))}
+	for _, p := range peers {
+		out.Body = append(out.Body, peerView{
+			EndpointID: p.EndpointID,
+			Name:       p.Name,
+			Email:      p.Email,
+			Verified:   p.Verified,
+			Username:   p.Username,
+			JoinedAt:   p.JoinedAt,
+		})
+	}
+	return out, nil
 }
 
 type idInput struct {

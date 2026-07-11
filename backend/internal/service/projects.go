@@ -12,13 +12,14 @@ import (
 )
 
 type ProjectService struct {
-	projects    *store.ProjectStore
-	users       *store.UserStore
-	fs          afero.Fs
-	dataDir     string
-	host        okayeg.Host
-	authzScript string
-	authzSocket string
+	projects      *store.ProjectStore
+	users         *store.UserStore
+	fs            afero.Fs
+	dataDir       string
+	host          okayeg.Host
+	authzScript   string
+	authzSocket   string
+	sessionScript string
 }
 
 func (s *ProjectService) Create(ctx context.Context, ownerID uint, name string) (store.Project, error) {
@@ -43,14 +44,19 @@ func (s *ProjectService) Create(ctx context.Context, ownerID uint, name string) 
 }
 
 // writeAuthzConfig writes the project's .eg/config.toml naming the authz
-// command eg runs per connection: the script, the backend's authz socket, and
-// the project id. No-op when no script is configured (eg then uses .eg/trust).
+// command eg runs per connection (the script, the backend's authz socket, and
+// the project id) and the session command it runs per peer join/leave. No-op
+// when no authz script is configured (eg then uses .eg/trust).
 func (s *ProjectService) writeAuthzConfig(projectID string) error {
 	if s.authzScript == "" {
 		return nil
 	}
-	argv := []string{s.authzScript, s.authzSocket, projectID}
-	return okayeg.WriteAuthzConfig(s.fs, s.shareDir(projectID), argv)
+	authz := []string{s.authzScript, s.authzSocket, projectID}
+	var session []string
+	if s.sessionScript != "" {
+		session = []string{s.sessionScript, s.authzSocket, projectID}
+	}
+	return okayeg.WriteAuthzConfig(s.fs, s.shareDir(projectID), authz, session)
 }
 
 // PeerAuthz is the outcome of an authz check.
@@ -248,7 +254,7 @@ func mapErr(err error) error {
 		return nil
 	case errors.Is(err, store.ErrNotFound):
 		return ErrNotFound
-	case errors.Is(err, store.ErrLastOwner):
+	case errors.Is(err, store.ErrConflict), errors.Is(err, store.ErrLastOwner):
 		return ErrConflict
 	default:
 		return err

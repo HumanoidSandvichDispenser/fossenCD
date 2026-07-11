@@ -1,0 +1,21 @@
+#!/bin/sh
+# The session hook each project's .eg/config.toml names. eg runs it per session
+# event with four lines on stdin: the event (hello/bye), the peer's endpoint
+# id, then its claimed name and email (blank when unset).
+#
+#   eg-session <socket> <project-id>
+#
+# It forwards the event to the fossencd backend over its authz unix socket so
+# the presence registry tracks the project's live peers. Fire and forget: eg
+# ignores the exit status, and a down backend only loses the event.
+set -eu
+read -r event || exit 1
+read -r peer || exit 1
+read -r name || name=""
+read -r email || email=""
+
+curl -s -o /dev/null --unix-socket "$1" \
+	--data-urlencode "event=$event" \
+	--data-urlencode "name=$name" \
+	--data-urlencode "email=$email" \
+	"http://authz/projects/$2/peers/$peer/session"
