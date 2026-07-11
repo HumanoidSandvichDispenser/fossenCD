@@ -25,7 +25,7 @@ export const useClientStore = defineStore('client', () => {
    * Wraps an SDK method into a deduped callable with the same signature: the
    * returned function takes the method's own params and returns its own type
    * (hey-api's `{ data } | { error }` result). By default the dedup key is the
-   * method name; pass `key` to fold params in for parameterised endpoints (e.g.
+   * method name; pass `key` to merge params in for parameterised endpoints (e.g.
    * `getProject` keyed by id) so different args don't collide.
    *
    * `F` is left unconstrained so hey-api's `RequestResult` (a union of promises)

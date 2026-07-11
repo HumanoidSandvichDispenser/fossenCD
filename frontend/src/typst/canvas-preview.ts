@@ -114,6 +114,7 @@ export class CanvasPreview {
       pixelPerPt: this.compiler.pixelPerPt(this.zoom),
       backgroundColor: BACKGROUND,
     });
+
     this.canvases = [...this.mount.querySelectorAll('canvas')];
     this.snapToDevicePixels();
     this.dirty = pages.map(() => false);

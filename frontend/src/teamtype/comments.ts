@@ -182,9 +182,11 @@ function draftTooltip(state: EditorState, handlers: CommentHandlers): Tooltip | 
         event.preventDefault();
         handlers.onDraft(range.from, range.to);
       });
+
       const dom = document.createElement('div');
       dom.className = 'cm-comment-add-tooltip';
       dom.appendChild(button);
+
       return { dom };
     },
   };

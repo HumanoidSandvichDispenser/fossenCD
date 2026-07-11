@@ -191,6 +191,7 @@ func (m *HostManager) execRun(ctx context.Context, id string) error {
 	if err != nil {
 		return fmt.Errorf("okayeg: host %s stdin: %w", id, err)
 	}
+
 	m.mu.Lock()
 	h := m.hosts[id]
 	if h != nil {
@@ -199,6 +200,7 @@ func (m *HostManager) execRun(ctx context.Context, id string) error {
 		cmd.Stderr = h.log
 	}
 	m.mu.Unlock()
+
 	// the daemon tears its network down on a signal, so stop gracefully with
 	// SIGTERM; SIGKILL after StopGrace if it hangs. The stdin repl only lists
 	// and revokes sessions, so there's nothing to clean up over it first.
@@ -207,12 +209,15 @@ func (m *HostManager) execRun(ctx context.Context, id string) error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("okayeg: start host %s: %w", id, err)
 	}
+
 	err = cmd.Wait()
+
 	m.mu.Lock()
 	if h != nil && h.stdin == stdin {
 		h.stdin = nil
 	}
 	m.mu.Unlock()
+
 	stdin.Close()
 	return err
 }

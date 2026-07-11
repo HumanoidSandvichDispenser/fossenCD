@@ -238,6 +238,7 @@ function submitDraft() {
   if (!draft || !author || !body) {
     return;
   }
+
   const id = okayeg.addComment(draft.file, draft.start, draft.end, {
     body,
     author,
@@ -246,6 +247,7 @@ function submitDraft() {
   if (id) {
     okayeg.setActiveComment(id);
   }
+
   draftBody.value = '';
   emit('draftDone');
 }
@@ -255,7 +257,7 @@ function cancelDraft() {
   emit('draftDone');
 }
 
-// which file groups the user folded shut; groups default to open so the
+// which file groups the user collapsed; groups default to open so the
 // panel never hides threads unasked
 const collapsed = reactive(new Set<string>());
 

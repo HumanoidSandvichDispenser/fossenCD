@@ -264,8 +264,10 @@ export const useOkayegStore = defineStore('okayeg', () => {
     await initOkayeg({ module_or_path: wasmUrl });
     const { seed } = await loadOrCreateSeed();
     const c = OkayegClient.withSeed(seed);
+
     const id = c.nodeId();
     c.free();
+
     return id;
   }
 
