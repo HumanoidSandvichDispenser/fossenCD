@@ -12,6 +12,8 @@ const props = defineProps<{
   projectId: string;
   // this browser's endpoint id, filtered out of the list
   selfId: string | null;
+  // the host's endpoint id, filtered out of the list
+  hostId: string | null;
 }>();
 
 const clientStore = useClientStore();
@@ -24,20 +26,18 @@ interface Peer {
   email: string | null;
 }
 
-// the live list comes straight from the presence store: entries appear on
-// join and expire on leave, no polling
+// sorted; the store map is unordered and the chips would shuffle otherwise
 const peers = computed<Peer[]>(() =>
   Object.entries(okayeg.peers)
-    .filter(([id]) => id !== props.selfId)
+    .filter(([id]) => id !== props.selfId && id !== props.hostId)
     .map(([id, entry]) => ({
       id,
       name: typeof entry.name === 'string' ? entry.name : null,
       email: typeof entry.email === 'string' ? entry.email : null,
-    })),
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id)),
 );
 
-// presence carries only the claim; whether the claimed email resolves to a
-// verified account comes from the backend, re-checked when the claims change
 const views = ref(new Map<string, PeerVerdict>());
 
 watch(

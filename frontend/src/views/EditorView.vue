@@ -21,6 +21,7 @@ const keys = useKeysStore();
 
 const error = ref<string | null>(null);
 const project = ref<ProjectView | null>(null);
+const hostId = ref<string | null>(null);
 const sharing = ref(false);
 const showLogs = ref(false);
 
@@ -43,6 +44,7 @@ async function openProject(id: string) {
 
   error.value = null;
   project.value = null;
+  hostId.value = null;
   okayeg.reset();
   // claim the logged-in user's identity before dialing
   const user = await auth.getUser();
@@ -71,6 +73,7 @@ async function openProject(id: string) {
     if (!isCurrent()) {
       return;
     }
+    hostId.value = endpoint;
     await okayeg.connect(endpoint);
   } catch (e) {
     if (isCurrent()) {
@@ -133,6 +136,7 @@ onBeforeUnmount(() => {
             v-if="typeof route.params.id === 'string'"
             :project-id="route.params.id"
             :self-id="okayeg.nodeId"
+            :host-id="hostId"
           />
           <BaseChip v-if="okayeg.nodeId" :title="okayeg.nodeId">
             <span class="dot dot-ok" />

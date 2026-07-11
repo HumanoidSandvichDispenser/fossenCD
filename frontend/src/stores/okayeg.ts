@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { computed, markRaw, ref } from 'vue';
+import { computed, markRaw, reactive, ref } from 'vue';
 import initOkayeg, { OkayegClient, type WireDelta } from '@sandvichxyz/okayeg-wasm';
 import wasmUrl from '@sandvichxyz/okayeg-wasm/wasm-url';
 
@@ -72,7 +72,34 @@ export const useOkayegStore = defineStore('okayeg', () => {
   const activeCommentId = ref<string | null>(null);
   // every live presence entry keyed by peer endpoint id, this peer included;
   // entries appear as peers join and expire when they leave
-  const peers = ref<Record<string, PresenceEntry>>({});
+  const peers = reactive<Record<string, PresenceEntry>>({});
+
+  /**
+   * Merge a presence snapshot into {@link peers} in place; a write of an
+   * unchanged field does not trigger watchers.
+   */
+  function reconcilePeers(all: Record<string, PresenceEntry>) {
+    for (const id of Object.keys(peers)) {
+      if (!(id in all)) {
+        delete peers[id];
+      }
+    }
+
+    for (const [id, entry] of Object.entries(all)) {
+      const current = peers[id];
+      if (!current) {
+        peers[id] = { ...entry };
+        continue;
+      }
+
+      for (const key of Object.keys(current)) {
+        if (!(key in entry)) {
+          delete current[key];
+        }
+      }
+      Object.assign(current, entry);
+    }
+  }
 
   const contentListeners = new Set<ContentListener>();
 
@@ -151,9 +178,7 @@ export const useOkayegStore = defineStore('okayeg', () => {
     c.onComments((all: OkayegComment[]) => {
       comments.value = all;
     });
-    c.onPresence((all: Record<string, PresenceEntry>) => {
-      peers.value = all;
-    });
+    c.onPresence(reconcilePeers);
     c.onDisconnect((reason: string) => {
       connected.value = false;
       lastDisconnect.value = reason;
@@ -196,7 +221,7 @@ export const useOkayegStore = defineStore('okayeg', () => {
     logs.value = [];
     comments.value = [];
     activeCommentId.value = null;
-    peers.value = {};
+    reconcilePeers({});
   }
 
   function subscribe<T>(set: Set<T>, listener: T): () => void {
