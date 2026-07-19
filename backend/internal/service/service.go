@@ -45,11 +45,11 @@ func New(o Options) *Services {
 	return &Services{
 		Auth: auth,
 		Projects: &ProjectService{
-			projects:      projects,
-			users:         users,
-			fs:            o.FS,
-			dataDir:       o.DataDir,
-			host:          o.Host,
+			projects:    projects,
+			users:       users,
+			fs:          o.FS,
+			dataDir:     o.DataDir,
+			host:        o.Host,
 			authzScript: o.AuthzScript,
 			authzSocket: o.AuthzSocket,
 		},

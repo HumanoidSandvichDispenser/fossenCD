@@ -12,13 +12,13 @@ import (
 )
 
 type ProjectService struct {
-	projects      *store.ProjectStore
-	users         *store.UserStore
-	fs            afero.Fs
-	dataDir       string
-	host          okayeg.Host
-	authzScript   string
-	authzSocket   string
+	projects    *store.ProjectStore
+	users       *store.UserStore
+	fs          afero.Fs
+	dataDir     string
+	host        okayeg.Host
+	authzScript string
+	authzSocket string
 }
 
 func (s *ProjectService) Create(ctx context.Context, ownerID uint, name string) (store.Project, error) {
